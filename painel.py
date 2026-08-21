@@ -11,9 +11,7 @@ import socketserver
 import threading
 import webbrowser
 import time
-
-# ===== NOVO: IMPORTAÇÃO DO PYNGRK =====
-from pyngrok import ngrok
+import re
 
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
@@ -21,10 +19,13 @@ ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
 ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
 ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
+PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
 
-# Cria a pasta de imagens se não existir
+# Cria as pastas necessárias
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
+if not os.path.exists(PASTA_BIN):
+    os.makedirs(PASTA_BIN)
 
 def carregar_json(arquivo, padrao):
     if not os.path.exists(arquivo):
@@ -57,41 +58,73 @@ def iniciar_servidor_web():
 def disparar_servidor_em_segundo_plano():
     t = threading.Thread(target=iniciar_servidor_web, daemon=True)
     t.start()
+    time.sleep(1)  # Aguarda o servidor iniciar
 
-# ===== NOVO: FUNÇÃO PARA INICIAR O TÚNEL =====
-tunel_ativo = False
+# ===== TÚNEL CLOUDFLARE COM BINÁRIO =====
 link_publico = ""
+tunel_ativo = False
+processo_tunel = None
 
-def iniciar_tunel():
-    global tunel_ativo, link_publico
+def iniciar_tunel_cloudflare():
+    global link_publico, tunel_ativo, processo_tunel
+    
     try:
-        # Verifica se já está ativo
+        # Caminho do binário cloudflared
+        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
+        
+        # Verifica se o binário existe
+        if not os.path.exists(cloudflared_path):
+            return "❌ Binário cloudflared não encontrado. Coloque o arquivo na pasta 'bin/'."
+        
+        # Dá permissão de execução (no Android é necessário)
+        try:
+            os.chmod(cloudflared_path, 0o755)
+        except:
+            pass
+        
+        # Inicia o túnel em background
+        processo_tunel = subprocess.Popen(
+            [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
+        
+        # Aguarda o túnel iniciar e captura o link
+        time.sleep(3)
+        
+        # Lê a saída para capturar o link
+        for _ in range(30):
+            line = processo_tunel.stdout.readline()
+            if not line:
+                break
+            print(f"Cloudflare: {line.strip()}")
+            if "trycloudflare.com" in line:
+                match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
+                if match:
+                    link_publico = match.group()
+                    tunel_ativo = True
+                    return f"✅ Túnel ativo! Link: {link_publico}"
+        
+        # Se não encontrou o link, verifica se o túnel está rodando
         if tunel_ativo:
-            return link_publico
-        
-        # Configura o ngrok (baixa automaticamente na primeira vez)
-        # Usa o token gratuito (não precisa de conta)
-        ngrok.set_auth_token("")  # Deixe vazio para usar o modo gratuito
-        
-        # Cria o túnel para a porta 8550
-        tunnel = ngrok.connect(8550)
-        link_publico = tunnel.public_url
-        tunel_ativo = True
-        
-        print(f"🔗 Túnel ativo: {link_publico}")
-        return link_publico
+            return f"✅ Túnel ativo! Link: {link_publico}"
+        else:
+            return "⏳ Túnel iniciando... Aguarde o link público aparecer"
+            
     except Exception as e:
-        print(f"❌ Erro ao iniciar túnel: {e}")
-        return None
+        return f"❌ Erro ao iniciar túnel: {str(e)}"
 
 def parar_tunel():
-    global tunel_ativo, link_publico
+    global tunel_ativo, processo_tunel, link_publico
     try:
-        if tunel_ativo:
-            ngrok.disconnect(link_publico)
-            tunel_ativo = False
-            link_publico = ""
-            print("🔒 Túnel encerrado")
+        if processo_tunel:
+            processo_tunel.terminate()
+            processo_tunel = None
+        tunel_ativo = False
+        link_publico = ""
+        print("🔒 Túnel encerrado")
     except Exception as e:
         print(f"Erro ao encerrar túnel: {e}")
 
@@ -241,6 +274,8 @@ def obter_config_nicho(nicho_escolhido):
     return configs.get(nicho_escolhido, configs["🏍️ Peças de Moto Usada"])
 
 def main(page: ft.Page):
+    global link_publico, tunel_ativo
+    
     page.title = "Painel do Comandante"
     page.theme_mode = ft.ThemeMode.DARK
     page.window.width = 480
@@ -542,7 +577,6 @@ def main(page: ft.Page):
         .btn-carrinho-topo {{ background: {cor_hex}; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 14px; transition: opacity 0.2s; }}
         .btn-carrinho-topo:hover {{ opacity: 0.85; }}
         
-        /* ===== BANNER SEM TEXTO ===== */
         .carousel-container {{
             position: relative;
             width: 100%;
@@ -585,7 +619,6 @@ def main(page: ft.Page):
         .filtro-btn .contagem {{ display: inline-block; background: rgba(255,255,255,0.2); border-radius: 12px; padding: 0 8px; font-size: 11px; margin-left: 5px; }}
         .filtro-btn.ativo .contagem {{ background: rgba(255,255,255,0.3); }}
         
-        /* ===== GRID DE PRODUTOS RESPONSIVO ===== */
         .grid-produtos {{
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -1297,8 +1330,10 @@ def main(page: ft.Page):
         txt_status_hospedagem.value = "✅ Configuração carregada!"
         txt_status_hospedagem.color = "#4caf50"
 
-    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL INTEGRADO) =====
+    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL) =====
     def abrir_site_local_click(e):
+        global link_publico, tunel_ativo
+        
         if not os.path.exists(ARQUIVO_HTML):
             page.open(ft.SnackBar(content=ft.Text("❌ Gere o site primeiro!")))
             page.update()
@@ -1307,26 +1342,24 @@ def main(page: ft.Page):
         # 1. Inicia o servidor local
         disparar_servidor_em_segundo_plano()
         
-        # 2. Inicia o túnel e captura o link público
-        link = iniciar_tunel()
+        # 2. Inicia o túnel
+        if not tunel_ativo:
+            mensagem = iniciar_tunel_cloudflare()
+            page.open(ft.SnackBar(content=ft.Text(mensagem)))
         
-        if link:
-            # Mostra o link público no app
-            page.open(ft.SnackBar(content=ft.Text(f"🔗 Link público: {link}")))
-            
+        # 3. Mostra o link se já estiver ativo
+        if tunel_ativo and link_publico:
+            page.open(ft.SnackBar(content=ft.Text(f"🔗 Link público: {link_publico}")))
             # Tenta copiar para a área de transferência
             try:
-                page.set_clipboard(link)
-                page.open(ft.SnackBar(content=ft.Text("📋 Link copiado para a área de transferência!")))
+                page.set_clipboard(link_publico)
             except:
                 pass
-        else:
-            page.open(ft.SnackBar(content=ft.Text("❌ Não foi possível iniciar o túnel. Verifique sua conexão.")))
         
-        # 3. Abre o site local no navegador
+        # 4. Abre o site local no navegador
         url = f"http://localhost:8550"
         webbrowser.open(url)
-        page.open(ft.SnackBar(content=ft.Text(f"🌐 Site aberto em: {url}")))
+        
         page.update()
 
     btn_abrir_site_local = ft.ElevatedButton(
@@ -1335,7 +1368,7 @@ def main(page: ft.Page):
         icon=ft.Icons.WEB
     )
 
-    # ===== SALVAR CONFIGURAÇÕES (COM UPLOAD DE LOGO E BANNERS) =====
+    # ===== SALVAR CONFIGURAÇÕES =====
     def salvar_config(e):
         nonlocal config, caminho_logo_selecionada, caminho_banner1_selecionado, caminho_banner2_selecionado, caminho_banner3_selecionado
         
@@ -1445,7 +1478,7 @@ def main(page: ft.Page):
         page.open(ft.SnackBar(content=ft.Text("✅ Configurações salvas e Site gerado!")))
         page.update()
 
-    # ===== COLUNA DE HOSPEDAGEM =====
+    # ===== COLUNAS =====
     coluna_hospedagem = ft.Column([
         ft.Text("🌐 HOSPEDAGEM AUTOMÁTICA", weight=ft.FontWeight.BOLD, size=18),
         ft.Text("Configure seu token para hospedar sites com um clique", size=13, color="#888"),
@@ -1477,7 +1510,6 @@ def main(page: ft.Page):
 
     atualizar_lista()
 
-    # ===== COLUNA CADASTRO =====
     coluna_cadastro = ft.Column([
         ft.Text("📌 Tipo de Comércio", weight=ft.FontWeight.BOLD, size=16),
         dropdown_nicho,
@@ -1507,31 +1539,24 @@ def main(page: ft.Page):
         lista_estoque
     ], scroll=ft.ScrollMode.AUTO)
 
-    # ===== COLUNA CONFIGURAÇÕES (COM UPLOAD DE LOGO E BANNERS) =====
     coluna_config = ft.Column([
         ft.Text("⚙️ Configurações da Loja", weight=ft.FontWeight.BOLD, size=16),
         txt_nome_loja, txt_cnpj,
-        
         ft.Text("🖼️ Logo da Loja", weight=ft.FontWeight.BOLD, size=14),
         btn_selecionar_logo,
         txt_logo_nome,
-        
         txt_whatsapp, txt_instagram,
         ft.Divider(),
-        
         ft.Text("🖼️ Banners do Carrossel", weight=ft.FontWeight.BOLD, size=14),
         ft.Text("Banner 1", size=12),
         btn_selecionar_banner1,
         txt_banner1_nome,
-        
         ft.Text("Banner 2", size=12),
         btn_selecionar_banner2,
         txt_banner2_nome,
-        
         ft.Text("Banner 3", size=12),
         btn_selecionar_banner3,
         txt_banner3_nome,
-        
         ft.Divider(),
         dropdown_cor, dropdown_tema,
         ft.Container(height=10),
