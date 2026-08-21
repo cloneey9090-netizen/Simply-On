@@ -1,4 +1,3 @@
-
 name: Build APK
 
 on:
@@ -23,10 +22,11 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Setup Flutter
+      - name: Setup Flutter (versão compatível)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.0'
+          flutter-version: '3.22.0'  # <-- MUDOU AQUI
+          channel: 'stable'
           cache: true
 
       - name: Gerar APK com Flet
