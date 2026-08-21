@@ -1,43 +1,43 @@
-name: Gerar Lista IPTV
+name: Build APK
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
-    inputs:
-      link_drive:
-        description: 'Link do Google Drive (Base):'
-        required: true
-        default: 'https://drive.google.com/uc?id=1kk-OsN3R02flYm2Nl0kYZ7qI3JdzhwB_&export=download'
-      link_mestre:
-        description: 'Link da Fonte Mestre (br.m3u):'
-        required: true
-        default: 'https://raw.githubusercontent.com/iptv-org/iptv/master/streams/br.m3u'
 
 jobs:
-  gerar:
+  build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Configurar o Python
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Instalar Dependências
+      - name: Instalar dependências Python
         run: |
-          pip install --upgrade pip
-          pip install flet requests
+          pip install -r requirements.txt
 
-      - name: Executar o Robô
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.0'
+          cache: true
+
+      - name: Instalar Flet CLI
+        run: flutter pub global activate flet_cli
+
+      - name: Gerar APK
         run: |
-          python -c '
-          import os, robo
-          robo.executar_processamento(print, custom_drive="${{ github.event.inputs.link_drive }}", custom_mestre="${{ github.event.inputs.link_mestre }}")
-          '
+          flet build apk --module-name painel
 
-      - name: Salvar a Lista Pronta
+      - name: Upload APK (se sucesso)
         uses: actions/upload-artifact@v4
         with:
-          name: lista-iptv-atualizada
-          path: resultado/lista.txt
+          name: app-release
+          path: build/apk/
 
