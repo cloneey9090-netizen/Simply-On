@@ -1,4 +1,0 @@
-flet==0.25.0
-pandas
-openpyxl
-requests
