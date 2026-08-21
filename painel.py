@@ -470,13 +470,12 @@ def main(page: ft.Page):
             border_color = "#333333"
             input_bg = "#121212"
         
-        # ===== CARROSSEL COM SLIDE =====
+        # ===== CARROSSEL COM SLIDE (SEM TEXTO) =====
         carousel_html = ""
         for i, banner in enumerate(banners):
             url = banner.get("url", "")
-            frase = banner.get("frase", "")
             active = "active" if i == 0 else ""
-            carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"><h1>{frase}</h1></div>'
+            carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
         
         html_conteudo = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -503,11 +502,38 @@ def main(page: ft.Page):
         .btn-carrinho-topo {{ background: {cor_hex}; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 14px; transition: opacity 0.2s; }}
         .btn-carrinho-topo:hover {{ opacity: 0.85; }}
         
-        .carousel-container {{ position: relative; width: 100%; height: auto; aspect-ratio: 1920 / 500; overflow: hidden; }}
-        .carousel-slide {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 20px; opacity: 0; transition: opacity 1.2s ease-in-out; }}
-        .carousel-slide.active {{ opacity: 1; }}
-        .carousel-slide::before {{ content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.6); z-index: 1; }}
-        .carousel-slide h1 {{ position: relative; z-index: 2; font-size: clamp(20px, 4vw, 36px); letter-spacing: 2px; text-transform: uppercase; margin: 0; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.8); padding: 0 10px; }}
+        /* ===== BANNER SEM TEXTO ===== */
+        .carousel-container {{
+            position: relative;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 16 / 9;
+            overflow: hidden;
+        }}
+        .carousel-slide {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 1.2s ease-in-out;
+        }}
+        .carousel-slide.active {{
+            opacity: 1;
+        }}
+        .carousel-slide::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.15);
+            z-index: 1;
+        }}
         
         .linha-destaque {{ height: 3px; background-color: {cor_hex}; width: 100%; }}
         .container {{ max-width: 1100px; margin: 30px auto; padding: 0 15px; min-height: 400px; }}
@@ -519,18 +545,38 @@ def main(page: ft.Page):
         .filtro-btn .contagem {{ display: inline-block; background: rgba(255,255,255,0.2); border-radius: 12px; padding: 0 8px; font-size: 11px; margin-left: 5px; }}
         .filtro-btn.ativo .contagem {{ background: rgba(255,255,255,0.3); }}
         
-        .grid-produtos {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }}
-        .card {{ background: {bg_card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid {border_color}; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s; position: relative; }}
+        /* ===== GRID DE PRODUTOS RESPONSIVO ===== */
+        .grid-produtos {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+        }}
+        .card {{
+            background: {bg_card};
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid {border_color};
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s;
+            position: relative;
+        }}
         .card:hover {{ transform: translateY(-4px); }}
-        .card img {{ width: 100%; height: 180px; object-fit: cover; }}
+        .card img {{
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }}
         .badge-destaque {{ position: absolute; top: 10px; right: 10px; background: #ffd700; color: #000; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; z-index: 5; }}
-        .card-body {{ padding: 15px; }}
-        .categoria-tag {{ font-size: 12px; color: {cor_hex}; text-transform: uppercase; font-weight: bold; display: inline-block; margin-bottom: 5px; }}
-        .card-title {{ margin: 5px 0 8px 0; font-size: 18px; color: {text_main}; font-weight: bold; }}
-        .card-modelo, .card-desc {{ color: {text_muted}; font-size: 14px; margin-bottom: 4px; }}
-        .card-footer {{ display: flex; justify-content: space-between; align-items: center; padding: 0 15px 15px 15px; }}
-        .preco {{ font-size: 18px; font-weight: bold; color: #2ecc71; }}
-        .btn-adicionar {{ background: {cor_hex}; color: #fff; border: none; padding: 8px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; transition: opacity 0.2s; }}
+        .card-body {{ padding: 12px; }}
+        .categoria-tag {{ font-size: 11px; color: {cor_hex}; text-transform: uppercase; font-weight: bold; display: inline-block; margin-bottom: 4px; }}
+        .card-title {{ margin: 4px 0 6px 0; font-size: 16px; color: {text_main}; font-weight: bold; }}
+        .card-modelo, .card-desc {{ color: {text_muted}; font-size: 13px; margin-bottom: 3px; }}
+        .card-footer {{ display: flex; justify-content: space-between; align-items: center; padding: 0 12px 12px 12px; }}
+        .preco {{ font-size: 16px; font-weight: bold; color: #2ecc71; }}
+        .btn-adicionar {{ background: {cor_hex}; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: opacity 0.2s; }}
         .btn-adicionar:hover {{ opacity: 0.85; }}
         .sem-produtos {{ color: {text_muted}; text-align: center; padding: 40px 20px; grid-column: 1/-1; }}
         
@@ -550,18 +596,20 @@ def main(page: ft.Page):
         
         @media (max-width: 600px) {{
             header {{ padding: 10px 15px; }}
-            .logo {{ max-height: 60px !important; }}
-            .search-header {{ max-width: 200px; min-width: 120px; }}
-            .btn-carrinho-topo {{ padding: 6px 12px; font-size: 12px; }}
+            .logo {{ max-height: 50px !important; }}
+            .search-header {{ max-width: 160px; min-width: 100px; }}
+            .btn-carrinho-topo {{ padding: 5px 10px; font-size: 11px; }}
             .filtros-container {{ gap: 5px; }}
-            .filtro-btn {{ padding: 5px 10px; font-size: 12px; }}
-            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }}
-            .card img {{ height: 140px; }}
-            .carousel-container {{ aspect-ratio: 1920 / 400; }}
+            .filtro-btn {{ padding: 5px 10px; font-size: 11px; }}
+            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }}
+            .card img {{ height: 120px; }}
+            .carousel-container {{ aspect-ratio: 16 / 9; }}
+            .card-title {{ font-size: 14px; }}
+            .preco {{ font-size: 14px; }}
         }}
         @media (max-width: 400px) {{
-            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }}
-            .card img {{ height: 120px; }}
+            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }}
+            .card img {{ height: 100px; }}
         }}
     </style>
 </head>
