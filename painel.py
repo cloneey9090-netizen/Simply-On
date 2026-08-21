@@ -12,6 +12,9 @@ import threading
 import webbrowser
 import time
 
+# ===== NOVO: IMPORTAÇÃO DO PYNGRK =====
+from pyngrok import ngrok
+
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
 ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
@@ -54,6 +57,43 @@ def iniciar_servidor_web():
 def disparar_servidor_em_segundo_plano():
     t = threading.Thread(target=iniciar_servidor_web, daemon=True)
     t.start()
+
+# ===== NOVO: FUNÇÃO PARA INICIAR O TÚNEL =====
+tunel_ativo = False
+link_publico = ""
+
+def iniciar_tunel():
+    global tunel_ativo, link_publico
+    try:
+        # Verifica se já está ativo
+        if tunel_ativo:
+            return link_publico
+        
+        # Configura o ngrok (baixa automaticamente na primeira vez)
+        # Usa o token gratuito (não precisa de conta)
+        ngrok.set_auth_token("")  # Deixe vazio para usar o modo gratuito
+        
+        # Cria o túnel para a porta 8550
+        tunnel = ngrok.connect(8550)
+        link_publico = tunnel.public_url
+        tunel_ativo = True
+        
+        print(f"🔗 Túnel ativo: {link_publico}")
+        return link_publico
+    except Exception as e:
+        print(f"❌ Erro ao iniciar túnel: {e}")
+        return None
+
+def parar_tunel():
+    global tunel_ativo, link_publico
+    try:
+        if tunel_ativo:
+            ngrok.disconnect(link_publico)
+            tunel_ativo = False
+            link_publico = ""
+            print("🔒 Túnel encerrado")
+    except Exception as e:
+        print(f"Erro ao encerrar túnel: {e}")
 
 # ===== CONFIGURAÇÕES DOS NICHOS =====
 def obter_config_nicho(nicho_escolhido):
@@ -1257,15 +1297,33 @@ def main(page: ft.Page):
         txt_status_hospedagem.value = "✅ Configuração carregada!"
         txt_status_hospedagem.color = "#4caf50"
 
-    # ===== BOTÃO PARA ABRIR SITE LOCAL =====
+    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL INTEGRADO) =====
     def abrir_site_local_click(e):
         if not os.path.exists(ARQUIVO_HTML):
             page.open(ft.SnackBar(content=ft.Text("❌ Gere o site primeiro!")))
             page.update()
             return
         
+        # 1. Inicia o servidor local
         disparar_servidor_em_segundo_plano()
         
+        # 2. Inicia o túnel e captura o link público
+        link = iniciar_tunel()
+        
+        if link:
+            # Mostra o link público no app
+            page.open(ft.SnackBar(content=ft.Text(f"🔗 Link público: {link}")))
+            
+            # Tenta copiar para a área de transferência
+            try:
+                page.set_clipboard(link)
+                page.open(ft.SnackBar(content=ft.Text("📋 Link copiado para a área de transferência!")))
+            except:
+                pass
+        else:
+            page.open(ft.SnackBar(content=ft.Text("❌ Não foi possível iniciar o túnel. Verifique sua conexão.")))
+        
+        # 3. Abre o site local no navegador
         url = f"http://localhost:8550"
         webbrowser.open(url)
         page.open(ft.SnackBar(content=ft.Text(f"🌐 Site aberto em: {url}")))
