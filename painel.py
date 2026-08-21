@@ -13,19 +13,19 @@ import webbrowser
 import time
 import re
 
+# ===== PYNGKR PARA TÚNEL =====
+from pyngrok import ngrok
+
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
 ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
 ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
 ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
-PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
 
-# Cria as pastas necessárias
+# Cria a pasta de imagens se não existir
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
-if not os.path.exists(PASTA_BIN):
-    os.makedirs(PASTA_BIN)
 
 def carregar_json(arquivo, padrao):
     if not os.path.exists(arquivo):
@@ -58,73 +58,44 @@ def iniciar_servidor_web():
 def disparar_servidor_em_segundo_plano():
     t = threading.Thread(target=iniciar_servidor_web, daemon=True)
     t.start()
-    time.sleep(1)  # Aguarda o servidor iniciar
+    time.sleep(1)
 
-# ===== TÚNEL CLOUDFLARE COM BINÁRIO =====
-link_publico = ""
+# ===== TÚNEL COM PYNGRK =====
 tunel_ativo = False
-processo_tunel = None
+link_publico = ""
 
-def iniciar_tunel_cloudflare():
-    global link_publico, tunel_ativo, processo_tunel
-    
+def iniciar_tunel_pyngrok():
+    global tunel_ativo, link_publico
     try:
-        # Caminho do binário cloudflared
-        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
+        # Se já estiver ativo, retorna o link
+        if tunel_ativo and link_publico:
+            return f"✅ Túnel já ativo! Link: {link_publico}"
         
-        # Verifica se o binário existe
-        if not os.path.exists(cloudflared_path):
-            return "❌ Binário cloudflared não encontrado. Coloque o arquivo na pasta 'bin/'."
-        
-        # Dá permissão de execução (no Android é necessário)
+        # Configura o ngrok (não precisa de token para teste)
         try:
-            os.chmod(cloudflared_path, 0o755)
+            ngrok.set_auth_token("")
         except:
             pass
         
-        # Inicia o túnel em background
-        processo_tunel = subprocess.Popen(
-            [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
-        )
+        # Cria o túnel
+        tunnel = ngrok.connect(8550)
+        link_publico = tunnel.public_url
+        tunel_ativo = True
         
-        # Aguarda o túnel iniciar e captura o link
-        time.sleep(3)
+        print(f"🔗 Link público: {link_publico}")
+        return f"✅ Túnel ativo! Link: {link_publico}"
         
-        # Lê a saída para capturar o link
-        for _ in range(30):
-            line = processo_tunel.stdout.readline()
-            if not line:
-                break
-            print(f"Cloudflare: {line.strip()}")
-            if "trycloudflare.com" in line:
-                match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
-                if match:
-                    link_publico = match.group()
-                    tunel_ativo = True
-                    return f"✅ Túnel ativo! Link: {link_publico}"
-        
-        # Se não encontrou o link, verifica se o túnel está rodando
-        if tunel_ativo:
-            return f"✅ Túnel ativo! Link: {link_publico}"
-        else:
-            return "⏳ Túnel iniciando... Aguarde o link público aparecer"
-            
     except Exception as e:
         return f"❌ Erro ao iniciar túnel: {str(e)}"
 
 def parar_tunel():
-    global tunel_ativo, processo_tunel, link_publico
+    global tunel_ativo, link_publico
     try:
-        if processo_tunel:
-            processo_tunel.terminate()
-            processo_tunel = None
-        tunel_ativo = False
-        link_publico = ""
-        print("🔒 Túnel encerrado")
+        if tunel_ativo:
+            ngrok.disconnect(link_publico)
+            tunel_ativo = False
+            link_publico = ""
+            print("🔒 Túnel encerrado")
     except Exception as e:
         print(f"Erro ao encerrar túnel: {e}")
 
@@ -1330,7 +1301,7 @@ def main(page: ft.Page):
         txt_status_hospedagem.value = "✅ Configuração carregada!"
         txt_status_hospedagem.color = "#4caf50"
 
-    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL) =====
+    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL PYNGRK) =====
     def abrir_site_local_click(e):
         global link_publico, tunel_ativo
         
@@ -1342,17 +1313,18 @@ def main(page: ft.Page):
         # 1. Inicia o servidor local
         disparar_servidor_em_segundo_plano()
         
-        # 2. Inicia o túnel
+        # 2. Inicia o túnel (se já não estiver ativo)
         if not tunel_ativo:
-            mensagem = iniciar_tunel_cloudflare()
+            mensagem = iniciar_tunel_pyngrok()
             page.open(ft.SnackBar(content=ft.Text(mensagem)))
+        else:
+            page.open(ft.SnackBar(content=ft.Text(f"✅ Túnel já ativo! Link: {link_publico}")))
         
-        # 3. Mostra o link se já estiver ativo
+        # 3. Tenta copiar o link para a área de transferência
         if tunel_ativo and link_publico:
-            page.open(ft.SnackBar(content=ft.Text(f"🔗 Link público: {link_publico}")))
-            # Tenta copiar para a área de transferência
             try:
                 page.set_clipboard(link_publico)
+                page.open(ft.SnackBar(content=ft.Text("📋 Link copiado para a área de transferência!")))
             except:
                 pass
         
