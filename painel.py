@@ -12,33 +12,23 @@ import threading
 import webbrowser
 import time
 import re
+import urllib.request
+import sys
 
-# ===== CONFIGURAÇÃO DA PASTA PERSONALIZADA PARA O NGROK =====
+# ===== CONFIGURAÇÕES DE PASTAS =====
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
-PASTA_NGROK = os.path.join(PASTA_ATUAL, "ngrok_data")
-
-# Cria a pasta se não existir
-if not os.path.exists(PASTA_NGROK):
-    os.makedirs(PASTA_NGROK)
-
-# Define as variáveis de ambiente ANTES de importar o pyngrok
-os.environ["NGROK_HOME"] = PASTA_NGROK
-os.environ["NGROK_CONFIG_DIR"] = PASTA_NGROK
-os.environ["NGROK_BIN_PATH"] = os.path.join(PASTA_NGROK, "ngrok")
-
-# Agora importa o pyngrok
-from pyngrok import ngrok
-
-# ===== VARIÁVEIS GLOBAIS =====
 ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
 ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
 ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
 ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
+PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
 
-# Cria a pasta de imagens se não existir
+# Cria as pastas necessárias
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
+if not os.path.exists(PASTA_BIN):
+    os.makedirs(PASTA_BIN)
 
 def carregar_json(arquivo, padrao):
     if not os.path.exists(arquivo):
@@ -73,37 +63,118 @@ def disparar_servidor_em_segundo_plano():
     t.start()
     time.sleep(1)
 
-# ===== TÚNEL COM PYNGRK (PASTA PERSONALIZADA) =====
+# ===== TÚNEL COM CLOUDFLARE (DOWNLOAD AUTOMÁTICO) =====
 link_publico = ""
 tunel_ativo = False
+processo_tunel = None
 
-def iniciar_tunel_pyngrok():
-    global link_publico, tunel_ativo
+def baixar_cloudflared():
+    """Baixa o cloudflared para a pasta bin/ do app"""
+    global PASTA_BIN
+    
+    # Detecta a plataforma para escolher o binário correto
+    is_windows = sys.platform == "win32"
+    is_android = "ANDROID_ROOT" in os.environ or "TERMUX" in os.environ
+    
+    if is_windows:
+        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared.exe")
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+    elif is_android:
+        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+    else:
+        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+    
+    # Se já existe, retorna
+    if os.path.exists(cloudflared_path):
+        print(f"✅ cloudflared já existe em: {cloudflared_path}")
+        return cloudflared_path
+    
     try:
-        # Garante que a pasta existe
-        if not os.path.exists(PASTA_NGROK):
-            os.makedirs(PASTA_NGROK)
-            print(f"📁 Pasta NGROK criada: {PASTA_NGROK}")
+        print(f"📥 Baixando cloudflared de: {url}")
+        print("⏳ Isso pode levar alguns segundos...")
         
-        # Configura o token (vazio para modo gratuito)
-        ngrok.set_auth_token("")
+        # Baixa o arquivo
+        urllib.request.urlretrieve(url, cloudflared_path)
         
-        # Cria o túnel na porta 8550
-        tunnel = ngrok.connect(8550)
-        link_publico = tunnel.public_url
-        tunel_ativo = True
-        print(f"✅ Túnel ativo: {link_publico}")
-        return f"✅ Túnel ativo! Link: {link_publico}"
+        # Dá permissão de execução (Linux/Android/Mac)
+        if not is_windows:
+            os.chmod(cloudflared_path, 0o755)
+        
+        print(f"✅ cloudflared baixado com sucesso! Tamanho: {os.path.getsize(cloudflared_path)} bytes")
+        return cloudflared_path
         
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"❌ Erro ao baixar cloudflared: {e}")
+        return None
+
+def iniciar_tunel_cloudflare():
+    global link_publico, tunel_ativo, processo_tunel
+    
+    try:
+        # 1. Baixa o binário se não existir
+        cloudflared_path = baixar_cloudflared()
+        if not cloudflared_path:
+            return "❌ Não foi possível baixar o cloudflared. Verifique sua internet."
+        
+        # 2. Dá permissão de execução (essencial no Android/Linux)
+        try:
+            os.chmod(cloudflared_path, 0o755)
+        except:
+            pass
+        
+        print(f"🚀 Iniciando túnel com: {cloudflared_path}")
+        
+        # 3. Inicia o túnel
+        if sys.platform == "win32":
+            processo_tunel = subprocess.Popen(
+                [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1,
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+        else:
+            processo_tunel = subprocess.Popen(
+                [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
+        
+        # 4. Aguarda e captura o link
+        time.sleep(5)
+        
+        # Lê a saída para capturar o link
+        for _ in range(60):
+            line = processo_tunel.stdout.readline()
+            if not line:
+                break
+            print(f"Cloudflare: {line.strip()}")
+            if "trycloudflare.com" in line:
+                match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
+                if match:
+                    link_publico = match.group()
+                    tunel_ativo = True
+                    return f"✅ Túnel ativo! Link: {link_publico}"
+        
+        if tunel_ativo and link_publico:
+            return f"✅ Túnel ativo! Link: {link_publico}"
+        else:
+            return "⏳ Túnel iniciando... Aguarde o link público aparecer"
+            
+    except Exception as e:
         return f"❌ Erro ao iniciar túnel: {str(e)}"
 
 def parar_tunel():
-    global tunel_ativo, link_publico
+    global tunel_ativo, processo_tunel, link_publico
     try:
-        if tunel_ativo:
-            ngrok.disconnect(link_publico)
+        if processo_tunel:
+            processo_tunel.terminate()
+            processo_tunel = None
         tunel_ativo = False
         link_publico = ""
         print("🔒 Túnel encerrado")
@@ -1308,7 +1379,7 @@ def main(page: ft.Page):
         txt_status_hospedagem.value = "✅ Configuração carregada!"
         txt_status_hospedagem.color = "#4caf50"
 
-    # ===== BOTÃO PARA ABRIR SITE LOCAL =====
+    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL CLOUDFLARE) =====
     def abrir_site_local_click(e):
         global link_publico, tunel_ativo
         
@@ -1320,9 +1391,9 @@ def main(page: ft.Page):
         # 1. Inicia o servidor local
         disparar_servidor_em_segundo_plano()
         
-        # 2. Inicia o túnel com pyngrok
+        # 2. Inicia o túnel com Cloudflare (download automático)
         if not tunel_ativo:
-            mensagem = iniciar_tunel_pyngrok()
+            mensagem = iniciar_tunel_cloudflare()
             page.open(ft.SnackBar(content=ft.Text(mensagem)))
         
         # 3. Mostra o link se ativo
