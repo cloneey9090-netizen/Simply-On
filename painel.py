@@ -12,8 +12,9 @@ import threading
 import webbrowser
 import time
 import re
+import tempfile
 
-# ===== NOVA IMPORTAÇÃO =====
+# ===== IMPORTAÇÃO DO PYNGRK =====
 from pyngrok import ngrok
 
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
@@ -60,32 +61,37 @@ def disparar_servidor_em_segundo_plano():
     t.start()
     time.sleep(1)
 
-# ===== TÚNEL COM PYNGRK =====
+# ===== TÚNEL COM PYNGRK (CORRIGIDO) =====
 link_publico = ""
 tunel_ativo = False
 
 def iniciar_tunel_pyngrok():
     global link_publico, tunel_ativo
     try:
-        # Configura o ngrok (deixe vazio para o modo gratuito)
-        ngrok.set_auth_token("")
+        # ===== 1. CRIA PASTA COM PERMISSÃO =====
+        pasta_app = os.path.dirname(os.path.abspath(__file__))
+        pasta_temp = os.path.join(pasta_app, "ngrok_temp")
         
-        # Cria o túnel
+        if not os.path.exists(pasta_temp):
+            os.makedirs(pasta_temp)
+            print(f"📁 Pasta criada: {pasta_temp}")
+        
+        # ===== 2. CONFIGURA O PYNGRK =====
+        os.environ["NGROK_HOME"] = pasta_temp
+        os.environ["NGROK_BIN_PATH"] = os.path.join(pasta_temp, "ngrok")
+        
+        # ===== 3. INICIA O TÚNEL =====
+        ngrok.set_auth_token("")
         tunnel = ngrok.connect(8550)
         link_publico = tunnel.public_url
         tunel_ativo = True
+        
+        print(f"✅ Túnel ativo: {link_publico}")
         return f"✅ Túnel ativo! Link: {link_publico}"
+        
     except Exception as e:
-        # Se falhar, tenta com um token público (opcional - você pode cadastrar um grátis no ngrok.com)
-        try:
-            # Se você tiver um token do ngrok, coloque aqui dentro das aspas
-            ngrok.set_auth_token("")
-            tunnel = ngrok.connect(8550)
-            link_publico = tunnel.public_url
-            tunel_ativo = True
-            return f"✅ Túnel ativo! Link: {link_publico}"
-        except Exception as e2:
-            return f"❌ Erro ao iniciar túnel: {str(e2)}"
+        print(f"❌ Erro: {e}")
+        return f"❌ Erro ao iniciar túnel: {str(e)}"
 
 def parar_tunel():
     global tunel_ativo, link_publico
@@ -97,6 +103,9 @@ def parar_tunel():
         print("🔒 Túnel encerrado")
     except Exception as e:
         print(f"Erro ao encerrar túnel: {e}")
+
+# ===== O RESTO DO CÓDIGO (NICHOS, HTML, ETC.) =====
+# ... (mantenha todo o resto do seu código aqui, igual estava) ...
 
 # ===== CONFIGURAÇÕES DOS NICHOS =====
 def obter_config_nicho(nicho_escolhido):
