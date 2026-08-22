@@ -12,9 +12,7 @@ import threading
 import webbrowser
 import time
 import re
-
-# ===== PYNGKR PARA TÚNEL =====
-from pyngrok import ngrok
+import urllib.request
 
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
@@ -22,10 +20,13 @@ ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
 ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
 ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
+PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
 
-# Cria a pasta de imagens se não existir
+# Cria as pastas necessárias
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
+if not os.path.exists(PASTA_BIN):
+    os.makedirs(PASTA_BIN)
 
 def carregar_json(arquivo, padrao):
     if not os.path.exists(arquivo):
@@ -60,42 +61,89 @@ def disparar_servidor_em_segundo_plano():
     t.start()
     time.sleep(1)
 
-# ===== TÚNEL COM PYNGRK =====
-tunel_ativo = False
+# ===== TÚNEL CLOUDFLARE COM DOWNLOAD AUTOMÁTICO =====
 link_publico = ""
+tunel_ativo = False
+processo_tunel = None
 
-def iniciar_tunel_pyngrok():
-    global tunel_ativo, link_publico
+def baixar_cloudflared():
+    """Baixa o cloudflared para o diretório do app se não existir"""
+    cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
+    
+    # Se já existe, retorna o caminho
+    if os.path.exists(cloudflared_path):
+        return cloudflared_path
+    
     try:
-        # Se já estiver ativo, retorna o link
+        # Tenta baixar da internet
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+        print(f"📥 Baixando cloudflared...")
+        
+        # Cria um temporário para baixar
+        temp_path = cloudflared_path + ".tmp"
+        urllib.request.urlretrieve(url, temp_path)
+        
+        # Move para o local final
+        shutil.move(temp_path, cloudflared_path)
+        os.chmod(cloudflared_path, 0o755)
+        
+        print("✅ cloudflared baixado com sucesso!")
+        return cloudflared_path
+    except Exception as e:
+        print(f"❌ Erro ao baixar cloudflared: {e}")
+        return None
+
+def iniciar_tunel_cloudflare():
+    global link_publico, tunel_ativo, processo_tunel
+    
+    try:
+        # 1. Baixa o binário se não existir
+        cloudflared_path = baixar_cloudflared()
+        if not cloudflared_path:
+            return "❌ Não foi possível baixar o cloudflared. Verifique sua internet."
+        
+        # 2. Inicia o túnel
+        processo_tunel = subprocess.Popen(
+            [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1
+        )
+        
+        # 3. Aguarda e captura o link
+        time.sleep(4)
+        
+        # Lê a saída para capturar o link
+        for _ in range(40):
+            line = processo_tunel.stdout.readline()
+            if not line:
+                break
+            print(f"Cloudflare: {line.strip()}")
+            if "trycloudflare.com" in line:
+                match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
+                if match:
+                    link_publico = match.group()
+                    tunel_ativo = True
+                    return f"✅ Túnel ativo! Link: {link_publico}"
+        
         if tunel_ativo and link_publico:
-            return f"✅ Túnel já ativo! Link: {link_publico}"
-        
-        # Configura o ngrok (não precisa de token para teste)
-        try:
-            ngrok.set_auth_token("")
-        except:
-            pass
-        
-        # Cria o túnel
-        tunnel = ngrok.connect(8550)
-        link_publico = tunnel.public_url
-        tunel_ativo = True
-        
-        print(f"🔗 Link público: {link_publico}")
-        return f"✅ Túnel ativo! Link: {link_publico}"
-        
+            return f"✅ Túnel ativo! Link: {link_publico}"
+        else:
+            return "⏳ Túnel iniciando... Aguarde o link público aparecer"
+            
     except Exception as e:
         return f"❌ Erro ao iniciar túnel: {str(e)}"
 
 def parar_tunel():
-    global tunel_ativo, link_publico
+    global tunel_ativo, processo_tunel, link_publico
     try:
-        if tunel_ativo:
-            ngrok.disconnect(link_publico)
-            tunel_ativo = False
-            link_publico = ""
-            print("🔒 Túnel encerrado")
+        if processo_tunel:
+            processo_tunel.terminate()
+            processo_tunel = None
+        tunel_ativo = False
+        link_publico = ""
+        print("🔒 Túnel encerrado")
     except Exception as e:
         print(f"Erro ao encerrar túnel: {e}")
 
@@ -516,7 +564,6 @@ def main(page: ft.Page):
             border_color = "#333333"
             input_bg = "#121212"
         
-        # ===== CARROSSEL COM SLIDE (SEM TEXTO) =====
         carousel_html = ""
         for i, banner in enumerate(banners):
             url = banner.get("url", "")
@@ -856,7 +903,6 @@ def main(page: ft.Page):
         with open(ARQUIVO_HTML, "w", encoding="utf-8") as f:
             f.write(html_conteudo)
         
-        # ===== INICIA O SERVIDOR WEB =====
         disparar_servidor_em_segundo_plano()
 
     # ===== FUNÇÕES DO ESTOQUE =====
@@ -898,7 +944,6 @@ def main(page: ft.Page):
             "destaque": txt_destaque.value == "Sim"
         }
         
-        # ===== PROCESSAR IMAGEM =====
         imagem_final = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc"
         
         if caminho_imagem_selecionada and os.path.exists(caminho_imagem_selecionada):
@@ -1290,7 +1335,6 @@ def main(page: ft.Page):
             txt_status_hospedagem.color = "#ff5722"
         page.update()
 
-    # Carrega configurações salvas
     config_upload = carregar_config_upload()
     if config_upload.get("token"):
         txt_token.value = config_upload["token"]
@@ -1301,7 +1345,7 @@ def main(page: ft.Page):
         txt_status_hospedagem.value = "✅ Configuração carregada!"
         txt_status_hospedagem.color = "#4caf50"
 
-    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL PYNGRK) =====
+    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL) =====
     def abrir_site_local_click(e):
         global link_publico, tunel_ativo
         
@@ -1313,25 +1357,21 @@ def main(page: ft.Page):
         # 1. Inicia o servidor local
         disparar_servidor_em_segundo_plano()
         
-        # 2. Inicia o túnel (se já não estiver ativo)
+        # 2. Inicia o túnel (baixa o binário automaticamente se necessário)
         if not tunel_ativo:
-            mensagem = iniciar_tunel_pyngrok()
+            mensagem = iniciar_tunel_cloudflare()
             page.open(ft.SnackBar(content=ft.Text(mensagem)))
-        else:
-            page.open(ft.SnackBar(content=ft.Text(f"✅ Túnel já ativo! Link: {link_publico}")))
         
-        # 3. Tenta copiar o link para a área de transferência
+        # 3. Mostra o link se já estiver ativo
         if tunel_ativo and link_publico:
             try:
                 page.set_clipboard(link_publico)
-                page.open(ft.SnackBar(content=ft.Text("📋 Link copiado para a área de transferência!")))
+                page.open(ft.SnackBar(content=ft.Text(f"🔗 Link copiado: {link_publico}")))
             except:
-                pass
+                page.open(ft.SnackBar(content=ft.Text(f"🔗 Link público: {link_publico}")))
         
         # 4. Abre o site local no navegador
-        url = f"http://localhost:8550"
-        webbrowser.open(url)
-        
+        webbrowser.open("http://localhost:8550")
         page.update()
 
     btn_abrir_site_local = ft.ElevatedButton(
@@ -1346,7 +1386,6 @@ def main(page: ft.Page):
         
         cor_selecionada = dropdown_cor.value
         
-        # ===== PROCESSAR LOGO =====
         logo_final = config.get("logo_url", "")
         if caminho_logo_selecionada and os.path.exists(caminho_logo_selecionada):
             try:
@@ -1361,10 +1400,8 @@ def main(page: ft.Page):
             except Exception as ex:
                 print(f"Erro ao copiar logo: {ex}")
         
-        # ===== PROCESSAR BANNERS =====
         banners = []
         
-        # Banner 1
         banner1_final = ""
         if caminho_banner1_selecionado and os.path.exists(caminho_banner1_selecionado):
             try:
@@ -1379,7 +1416,6 @@ def main(page: ft.Page):
         else:
             banner1_final = config.get("banners", [{"url": ""}])[0].get("url", "") if config.get("banners") else ""
         
-        # Banner 2
         banner2_final = ""
         if caminho_banner2_selecionado and os.path.exists(caminho_banner2_selecionado):
             try:
@@ -1394,7 +1430,6 @@ def main(page: ft.Page):
         else:
             banner2_final = config.get("banners", [{"url": ""}, {"url": ""}])[1].get("url", "") if len(config.get("banners", [])) > 1 else ""
         
-        # Banner 3
         banner3_final = ""
         if caminho_banner3_selecionado and os.path.exists(caminho_banner3_selecionado):
             try:
@@ -1409,7 +1444,6 @@ def main(page: ft.Page):
         else:
             banner3_final = config.get("banners", [{"url": ""}, {"url": ""}, {"url": ""}])[2].get("url", "") if len(config.get("banners", [])) > 2 else ""
         
-        # Monta lista de banners com as frases
         frases = config.get("banners", [
             {"frase": "QUALIDADE E PROCEDÊNCIA"},
             {"frase": "AS MELHORES MARCAS PARA VOCÊ"},
