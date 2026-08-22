@@ -12,12 +12,24 @@ import threading
 import webbrowser
 import time
 import re
-import tempfile
 
-# ===== IMPORTAÇÃO DO PYNGRK =====
+# ===== CONFIGURAÇÃO DA PASTA PERSONALIZADA PARA O NGROK =====
+PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
+PASTA_NGROK = os.path.join(PASTA_ATUAL, "ngrok_data")
+
+# Cria a pasta se não existir
+if not os.path.exists(PASTA_NGROK):
+    os.makedirs(PASTA_NGROK)
+
+# Define as variáveis de ambiente ANTES de importar o pyngrok
+os.environ["NGROK_HOME"] = PASTA_NGROK
+os.environ["NGROK_CONFIG_DIR"] = PASTA_NGROK
+os.environ["NGROK_BIN_PATH"] = os.path.join(PASTA_NGROK, "ngrok")
+
+# Agora importa o pyngrok
 from pyngrok import ngrok
 
-PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
+# ===== VARIÁVEIS GLOBAIS =====
 ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
 ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
 ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
@@ -61,31 +73,25 @@ def disparar_servidor_em_segundo_plano():
     t.start()
     time.sleep(1)
 
-# ===== TÚNEL COM PYNGRK (CORRIGIDO) =====
+# ===== TÚNEL COM PYNGRK (PASTA PERSONALIZADA) =====
 link_publico = ""
 tunel_ativo = False
 
 def iniciar_tunel_pyngrok():
     global link_publico, tunel_ativo
     try:
-        # ===== 1. CRIA PASTA COM PERMISSÃO =====
-        pasta_app = os.path.dirname(os.path.abspath(__file__))
-        pasta_temp = os.path.join(pasta_app, "ngrok_temp")
+        # Garante que a pasta existe
+        if not os.path.exists(PASTA_NGROK):
+            os.makedirs(PASTA_NGROK)
+            print(f"📁 Pasta NGROK criada: {PASTA_NGROK}")
         
-        if not os.path.exists(pasta_temp):
-            os.makedirs(pasta_temp)
-            print(f"📁 Pasta criada: {pasta_temp}")
-        
-        # ===== 2. CONFIGURA O PYNGRK =====
-        os.environ["NGROK_HOME"] = pasta_temp
-        os.environ["NGROK_BIN_PATH"] = os.path.join(pasta_temp, "ngrok")
-        
-        # ===== 3. INICIA O TÚNEL =====
+        # Configura o token (vazio para modo gratuito)
         ngrok.set_auth_token("")
+        
+        # Cria o túnel na porta 8550
         tunnel = ngrok.connect(8550)
         link_publico = tunnel.public_url
         tunel_ativo = True
-        
         print(f"✅ Túnel ativo: {link_publico}")
         return f"✅ Túnel ativo! Link: {link_publico}"
         
@@ -103,9 +109,6 @@ def parar_tunel():
         print("🔒 Túnel encerrado")
     except Exception as e:
         print(f"Erro ao encerrar túnel: {e}")
-
-# ===== O RESTO DO CÓDIGO (NICHOS, HTML, ETC.) =====
-# ... (mantenha todo o resto do seu código aqui, igual estava) ...
 
 # ===== CONFIGURAÇÕES DOS NICHOS =====
 def obter_config_nicho(nicho_escolhido):
