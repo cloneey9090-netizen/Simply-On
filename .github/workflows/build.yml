@@ -22,11 +22,11 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Baixar e embutir cloudflared para Android
+      - name: Baixar e embutir cloudflared para assets do Android
         run: |
-          mkdir -p bin
-          curl -L --output bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64
-          chmod +x bin/cloudflared
+          mkdir -p assets/bin
+          curl -L --output assets/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64
+          chmod +x assets/bin/cloudflared
 
       - name: Setup Flutter (versão compatível)
         uses: subosito/flutter-action@v2
