@@ -14,6 +14,8 @@ import time
 import re
 import urllib.request
 import sys
+import socket
+import tempfile
 
 # ===== CONFIGURAÇÕES DE PASTAS =====
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
@@ -42,6 +44,18 @@ def carregar_json(arquivo, padrao):
 def salvar_json(arquivo, dados):
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
+
+# ===== OBTER IP LOCAL =====
+def obter_ip_local():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
 # ===== SERVIDOR WEB LOCAL =====
 def iniciar_servidor_web():
     porta = 8550
@@ -53,6 +67,8 @@ def iniciar_servidor_web():
         with socketserver.ThreadingTCPServer(("", porta), Handler) as httpd:
             print(f"🌐 Servidor rodando na porta {porta}")
             print(f"📱 Acesse: http://localhost:{porta}")
+            ip_local = obter_ip_local()
+            print(f"📱 Na rede local: http://{ip_local}:{porta}")
             httpd.serve_forever()
     except Exception as e:
         print(f"❌ Erro no servidor web: {e}")
@@ -60,81 +76,173 @@ def iniciar_servidor_web():
 def disparar_servidor_em_segundo_plano():
     t = threading.Thread(target=iniciar_servidor_web, daemon=True)
     t.start()
-    time.sleep(1)
+    time.sleep(2)
 
-# ===== TÚNEL COM CLOUDFLARE (BINÁRIO EMBUTIDO) =====
+# ===== TÚNEL COM CLOUDFLARE (COM FALLBACK) =====
 link_publico = ""
 tunel_ativo = False
 processo_tunel = None
 
-def obter_caminho_cloudflared():
-    """Retorna o caminho correto do binário cloudflared dentro da estrutura do Flet/Android"""
-    diretorio_base = os.path.dirname(os.path.abspath(__file__))
+def baixar_cloudflared():
+    """Baixa o cloudflared para a pasta bin/ do app"""
+    global PASTA_BIN
     
-    if sys.platform == "win32":
-        return os.path.join(diretorio_base, "bin", "cloudflared.exe")
+    is_windows = sys.platform == "win32"
+    is_android = "ANDROID_ROOT" in os.environ or "TERMUX" in os.environ
+    
+    if is_windows:
+        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared.exe")
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+    elif is_android:
+        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
     else:
-        # No Android/Flet, os arquivos do projeto vão parar dentro da pasta 'assets'
-        caminho_com_assets = os.path.join(diretorio_base, "assets", "bin", "cloudflared")
-        if os.path.exists(caminho_com_assets):
-            return caminho_com_assets
-        
-        # Fallback caso rode em outro ambiente Linux comum
-        return os.path.join(diretorio_base, "bin", "cloudflared")
-
-def iniciar_tunel_cloudflare():
-    global link_publico, tunel_ativo, processo_tunel
+        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
+        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+    
+    if os.path.exists(cloudflared_path):
+        print(f"✅ cloudflared já existe em: {cloudflared_path}")
+        return cloudflared_path
     
     try:
-        cloudflared_path = obter_caminho_cloudflared()
+        print(f"📥 Baixando cloudflared de: {url}")
+        print("⏳ Isso pode levar alguns segundos...")
         
-        # Verifica se o arquivo realmente foi embutido no APK
-        if not os.path.exists(cloudflared_path):
-            return f"❌ Binário não encontrado em: {cloudflared_path}"
+        urllib.request.urlretrieve(url, cloudflared_path)
         
-        print(f"🚀 Iniciando túnel com binário embutido: {cloudflared_path}")
+        if not is_windows:
+            os.chmod(cloudflared_path, 0o755)
         
-        # Inicia o túnel diretamente (sem precisar de download ou chmod externo)
-        if sys.platform == "win32":
+        print(f"✅ cloudflared baixado com sucesso! Tamanho: {os.path.getsize(cloudflared_path)} bytes")
+        return cloudflared_path
+        
+    except Exception as e:
+        print(f"❌ Erro ao baixar cloudflared: {e}")
+        return None
+
+def baixar_cloudflared_para_local():
+    """Baixa o cloudflared e tenta colocá-lo em um local executável"""
+    cloudflared_path = baixar_cloudflared()
+    if not cloudflared_path:
+        return None
+    
+    # Se estamos no Android, tenta copiar para /data/local/tmp (que permite execução)
+    if 'ANDROID_ROOT' in os.environ:
+        try:
+            destino = "/data/local/tmp/cloudflared"
+            shutil.copy2(cloudflared_path, destino)
+            os.chmod(destino, 0o755)
+            print(f"✅ cloudflared copiado para: {destino}")
+            return destino
+        except Exception as e:
+            print(f"⚠️ Não foi possível copiar para /data/local/tmp: {e}")
+    
+    # Tenta dar permissão no caminho original
+    try:
+        os.chmod(cloudflared_path, 0o755)
+        return cloudflared_path
+    except:
+        return None
+
+def iniciar_tunel_pinggy(porta=8550):
+    """Tenta criar túnel usando a API do Pinggy (gratuito, sem token)"""
+    try:
+        url = "https://pinggy.io/api/tunnels"
+        data = {"port": porta}
+        response = requests.post(url, json=data, timeout=15)
+        if response.status_code == 200:
+            result = response.json()
+            if "public_url" in result:
+                return result["public_url"], None
+        return None, "Falha ao criar túnel Pinggy"
+    except Exception as e:
+        return None, str(e)
+
+def iniciar_tunel_serveo(porta=8550):
+    """Tenta criar túnel usando Serveo (via HTTP)"""
+    try:
+        response = requests.post(
+            "https://serveo.net",
+            data={"port": porta},
+            timeout=20
+        )
+        if response.status_code == 200:
+            import re
+            match = re.search(r'https://[a-zA-Z0-9-]+\.serveo\.net', response.text)
+            if match:
+                return match.group(), None
+        return None, "Falha ao obter link do Serveo"
+    except Exception as e:
+        return None, str(e)
+
+def iniciar_tunel_cloudflare():
+    """Tenta iniciar o túnel usando cloudflared (com fallback para Pinggy/Serveo)"""
+    global link_publico, tunel_ativo, processo_tunel
+    
+    # --- TENTATIVA 1: Cloudflared com caminho alternativo ---
+    try:
+        cloudflared_path = baixar_cloudflared_para_local()
+        if cloudflared_path and os.path.exists(cloudflared_path):
+            os.chmod(cloudflared_path, 0o755)
+            print(f"🚀 Executando cloudflared de: {cloudflared_path}")
+            
+            # No Android, usa sh -c para evitar problemas de permissão
+            if 'ANDROID_ROOT' in os.environ:
+                comando = ["sh", "-c", f"{cloudflared_path} tunnel --url http://localhost:8550"]
+            else:
+                comando = [cloudflared_path, "tunnel", "--url", "http://localhost:8550"]
+            
             processo_tunel = subprocess.Popen(
-                [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1,
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
-        else:
-            processo_tunel = subprocess.Popen(
-                [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
+                comando,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 bufsize=1
             )
-        
-        # Aguarda e captura o link
-        time.sleep(3)
-        
-        for _ in range(60):
-            line = processo_tunel.stdout.readline()
-            if not line:
-                break
-            print(f"Cloudflare: {line.strip()}")
-            if "trycloudflare.com" in line:
-                match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
-                if match:
-                    link_publico = match.group()
-                    tunel_ativo = True
-                    return f"✅ Túnel ativo! Link: {link_publico}"
-        
-        if tunel_ativo and link_publico:
-            return f"✅ Túnel ativo! Link: {link_publico}"
-        else:
-            return "⏳ Túnel iniciando... Aguarde o link público aparecer"
             
+            # Aguarda e captura o link
+            time.sleep(5)
+            for _ in range(30):
+                line = processo_tunel.stderr.readline() if processo_tunel.stderr else ""
+                if not line:
+                    break
+                print(f"Cloudflare: {line.strip()}")
+                if "trycloudflare.com" in line:
+                    import re
+                    match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
+                    if match:
+                        link_publico = match.group()
+                        tunel_ativo = True
+                        return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
+            
+            # Se chegou aqui, não capturou o link, mas pode ainda estar iniciando
+            time.sleep(10)
+            if tunel_ativo and link_publico:
+                return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
     except Exception as e:
-        return f"❌ Erro ao iniciar túnel: {str(e)}"
+        print(f"❌ Erro no cloudflared: {e}")
+    
+    # --- TENTATIVA 2: Pinggy (API) ---
+    print("🔄 Tentando Pinggy...")
+    link, erro = iniciar_tunel_pinggy()
+    if link:
+        link_publico = link
+        tunel_ativo = True
+        return f"✅ Túnel Pinggy ativo! Link: {link}"
+    
+    # --- TENTATIVA 3: Serveo ---
+    print("🔄 Tentando Serveo...")
+    link, erro = iniciar_tunel_serveo()
+    if link:
+        link_publico = link
+        tunel_ativo = True
+        return f"✅ Túnel Serveo ativo! Link: {link}"
+    
+    # --- FALLBACK: IP local ---
+    ip = obter_ip_local()
+    link_publico = f"http://{ip}:8550"
+    tunel_ativo = True
+    return f"✅ Link local (rede Wi-Fi): {link_publico}"
 
 def parar_tunel():
     global tunel_ativo, processo_tunel, link_publico
@@ -293,6 +401,406 @@ def obter_config_nicho(nicho_escolhido):
     
     return configs.get(nicho_escolhido, configs["🏍️ Peças de Moto Usada"])
 
+# ===== GERAR SITE =====
+def gerar_arquivo_site(nova_config):
+    nicho = nova_config.get("nicho", "🏍️ Peças de Moto Usada")
+    config_nicho = obter_config_nicho(nicho)
+    
+    cor_hex = nova_config.get("cor_principal", "#ff5722")
+    whatsapp_numero = nova_config.get("whatsapp_contato", "5528999999999")
+    instagram_link = nova_config.get("instagram_url", "https://instagram.com")
+    tema = nova_config.get("tema_site", "Escuro")
+    banners = nova_config.get("banners", [])
+    cnpj_info = nova_config.get("cnpj_empresa", "CNPJ: 00.000.000/0001-00")
+    logo_url = nova_config.get("logo_url", "")
+    adsense_id = nova_config.get("adsense_id", "")  # >>> NOVO <<<
+
+    if not banners or not banners[0].get("url"):
+        banners = [
+            {"url": "https://images.unsplash.com/photo-1558981403-c5f9899a28bc", "frase": config_nicho["banners"][0]},
+            {"url": "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87", "frase": config_nicho["banners"][1]},
+            {"url": "https://images.unsplash.com/photo-1609630875176-b800c92cf03d", "frase": config_nicho["banners"][2]}
+        ]
+
+    if tema == "Claro":
+        bg_body = "#f4f6f8"
+        bg_header = "#ffffff"
+        bg_card = "#ffffff"
+        text_main = "#222222"
+        text_muted = "#666666"
+        border_color = "#e0e0e0"
+        input_bg = "#ffffff"
+    else:
+        bg_body = "#121212"
+        bg_header = "#1a1a1a"
+        bg_card = "#1a1a1a"
+        text_main = "#f1f1f1"
+        text_muted = "#aaaaaa"
+        border_color = "#333333"
+        input_bg = "#121212"
+    
+    carousel_html = ""
+    for i, banner in enumerate(banners):
+        url = banner.get("url", "")
+        active = "active" if i == 0 else ""
+        carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
+
+    # ===== ADSENSE HTML =====
+    adsense_html = ""
+    if adsense_id:
+        adsense_html = f"""
+        <div style="max-width:1100px; margin:20px auto; padding:0 15px;">
+            <ins class="adsbygoogle"
+                 style="display:block"
+                 data-ad-client="{adsense_id}"
+                 data-ad-slot="1234567890"
+                 data-ad-format="auto"
+                 data-full-width-responsive="true"></ins>
+            <script>
+                 (adsbygoogle = window.adsbygoogle || []).push{{}});
+            </script>
+        </div>
+        """
+    # ===== FIM ADSENSE =====
+    
+    html_conteudo = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{nova_config.get('nome_loja', 'Loja')}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    {f'<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={adsense_id}" crossorigin="anonymous"></script>' if adsense_id else ''}
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: 'Helvetica Neue', Arial, sans-serif; background: {bg_body}; color: {text_main}; }}
+        
+        header {{ display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: {bg_header}; border-bottom: 1px solid {border_color}; gap: 15px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }}
+        .logo-container {{ display: flex; align-items: center; }}
+        .logo {{ max-height: 80px !important; width: auto; object-fit: contain; display: block; }}
+        .search-header {{ flex: 1; max-width: 300px; min-width: 150px; }}
+        .search-header input {{ width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid {border_color}; background: {input_bg}; color: {text_main}; font-size: 0.9em; outline: none; }}
+        .search-header input:focus {{ border-color: {cor_hex}; }}
+        .header-actions {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
+        .social-icons {{ display: flex; gap: 10px; align-items: center; }}
+        .social-icons a {{ color: {text_muted}; font-size: 20px; text-decoration: none; transition: color 0.3s; }}
+        .social-icons a.whatsapp:hover {{ color: #25d366; }}
+        .social-icons a.instagram:hover {{ color: #e1306c; }}
+        .btn-carrinho-topo {{ background: {cor_hex}; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 14px; transition: opacity 0.2s; }}
+        .btn-carrinho-topo:hover {{ opacity: 0.85; }}
+        
+        .carousel-container {{
+            position: relative;
+            width: 100%;
+            height: auto;
+            aspect-ratio: 16 / 9;
+            overflow: hidden;
+        }}
+        .carousel-slide {{
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            opacity: 0;
+            transition: opacity 1.2s ease-in-out;
+        }}
+        .carousel-slide.active {{
+            opacity: 1;
+        }}
+        .carousel-slide::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.15);
+            z-index: 1;
+        }}
+        
+        .linha-destaque {{ height: 3px; background-color: {cor_hex}; width: 100%; }}
+        .container {{ max-width: 1100px; margin: 30px auto; padding: 0 15px; min-height: 400px; }}
+        h2 {{ font-size: 20px; text-transform: uppercase; letter-spacing: 1px; border-left: 4px solid {cor_hex}; padding-left: 10px; color: {text_main}; margin-bottom: 20px; }}
+        
+        .filtros-container {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid {border_color}; }}
+        .filtro-btn {{ padding: 6px 14px; border: 2px solid {border_color}; border-radius: 25px; background: transparent; color: {text_muted}; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-transform: capitalize; }}
+        .filtro-btn:hover, .filtro-btn.ativo {{ background: {cor_hex}; color: #fff; border-color: {cor_hex}; }}
+        .filtro-btn .contagem {{ display: inline-block; background: rgba(255,255,255,0.2); border-radius: 12px; padding: 0 8px; font-size: 11px; margin-left: 5px; }}
+        .filtro-btn.ativo .contagem {{ background: rgba(255,255,255,0.3); }}
+        
+        .grid-produtos {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+        }}
+        .card {{
+            background: {bg_card};
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid {border_color};
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s;
+            position: relative;
+        }}
+        .card:hover {{ transform: translateY(-4px); }}
+        .card img {{
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }}
+        .badge-destaque {{ position: absolute; top: 10px; right: 10px; background: #ffd700; color: #000; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; z-index: 5; }}
+        .card-body {{ padding: 12px; }}
+        .categoria-tag {{ font-size: 11px; color: {cor_hex}; text-transform: uppercase; font-weight: bold; display: inline-block; margin-bottom: 4px; }}
+        .card-title {{ margin: 4px 0 6px 0; font-size: 16px; color: {text_main}; font-weight: bold; }}
+        .card-modelo, .card-desc {{ color: {text_muted}; font-size: 13px; margin-bottom: 3px; }}
+        .card-footer {{ display: flex; justify-content: space-between; align-items: center; padding: 0 12px 12px 12px; }}
+        .preco {{ font-size: 16px; font-weight: bold; color: #2ecc71; }}
+        .btn-adicionar {{ background: {cor_hex}; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: opacity 0.2s; }}
+        .btn-adicionar:hover {{ opacity: 0.85; }}
+        .sem-produtos {{ color: {text_muted}; text-align: center; padding: 40px 20px; grid-column: 1/-1; }}
+        
+        .modal-carrinho {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: flex-end; }}
+        .modal-conteudo {{ background: {bg_card}; width: 100%; max-width: 400px; height: 100%; padding: 25px; display: flex; flex-direction: column; justify-content: space-between; border-left: 1px solid {border_color}; animation: slideIn 0.3s ease; }}
+        @keyframes slideIn {{ from {{ transform: translateX(100%); }} to {{ transform: translateX(0); }} }}
+        .carrinho-header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid {border_color}; padding-bottom: 15px; }}
+        .carrinho-itens {{ flex: 1; overflow-y: auto; margin: 15px 0; }}
+        .item-carrinho {{ display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid {border_color}; font-size: 14px; }}
+        .btn-remover {{ color: #ff4d4d; background: none; border: none; cursor: pointer; font-size: 16px; }}
+        .carrinho-footer {{ border-top: 1px solid {border_color}; padding-top: 15px; }}
+        .btn-fechar-pedido {{ background: #25d366; color: #fff; width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }}
+        .btn-fechar-pedido:hover {{ background: #1ebd5b; }}
+        
+        footer {{ margin-top: 40px; padding: 30px 20px; background: {bg_header}; border-top: 1px solid {border_color}; text-align: center; color: {text_muted}; font-size: 13px; }}
+        footer p {{ margin: 5px 0; }}
+        
+        @media (max-width: 600px) {{
+            header {{ padding: 10px 15px; }}
+            .logo {{ max-height: 50px !important; }}
+            .search-header {{ max-width: 160px; min-width: 100px; }}
+            .btn-carrinho-topo {{ padding: 5px 10px; font-size: 11px; }}
+            .filtros-container {{ gap: 5px; }}
+            .filtro-btn {{ padding: 5px 10px; font-size: 11px; }}
+            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }}
+            .card img {{ height: 120px; }}
+            .carousel-container {{ aspect-ratio: 16 / 9; }}
+            .card-title {{ font-size: 14px; }}
+            .preco {{ font-size: 14px; }}
+        }}
+        @media (max-width: 400px) {{
+            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }}
+            .card img {{ height: 100px; }}
+        }}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo-container">
+            {f'<img src="{logo_url}" class="logo" alt="Logo">' if logo_url else f'<h2 style="margin:0; border:none; padding:0; font-size:18px;">{nova_config.get("nome_loja")}</h2>'}
+        </div>
+        <div class="search-header">
+            <input type="text" id="searchInput" placeholder="Buscar..." onkeyup="filtrarProdutos()">
+        </div>
+        <div class="header-actions">
+            <button class="btn-carrinho-topo" onclick="abrirCarrinho()">
+                <i class="fa-solid fa-cart-shopping"></i> (<span id="contadorCarrinho">0</span>)
+            </button>
+            <div class="social-icons">
+                <a href="https://wa.me/{whatsapp_numero}" target="_blank" class="whatsapp"><i class="fa-brands fa-whatsapp"></i></a>
+                <a href="{instagram_link}" target="_blank" class="instagram"><i class="fa-brands fa-instagram"></i></a>
+            </div>
+        </div>
+    </header>
+    <div class="carousel-container" id="carousel">{carousel_html}</div>
+    <div class="linha-destaque"></div>
+    {adsense_html}
+    <div class="container">
+        <h2>Catálogo Disponível</h2>
+        <div class="filtros-container" id="filtrosContainer"></div>
+        <div class="grid-produtos" id="vitrine"></div>
+    </div>
+    <div class="modal-carrinho" id="modalCarrinho">
+        <div class="modal-conteudo">
+            <div class="carrinho-header">
+                <h3 style="margin:0; color:{text_main};">Seu Carrinho</h3>
+                <button onclick="fecharCarrinho()" style="background:none; border:none; color:{text_muted}; font-size:24px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="carrinho-itens" id="listaCarrinho">
+                <p style="color: {text_muted}; text-align: center; margin-top: 40px;">O carrinho está vazio.</p>
+            </div>
+            <div class="carrinho-footer">
+                <button class="btn-fechar-pedido" onclick="enviarPedidoWhatsApp()">Enviar Pedido no WhatsApp</button>
+            </div>
+        </div>
+    </div>
+    <footer>
+        <p><strong>{nova_config.get('nome_loja', 'Loja')}</strong> | {cnpj_info}</p>
+        <p>Compromisso com a qualidade.</p>
+    </footer>
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.carousel-slide');
+        if (slides.length > 1) {{
+            setInterval(() => {{
+                slides[currentSlide].classList.remove('active');
+                currentSlide = (currentSlide + 1) % slides.length;
+                slides[currentSlide].classList.add('active');
+            }}, 5000);
+        }}
+        const numeroZap = "{whatsapp_numero}";
+        let listaProdutos = {json.dumps(carregar_json(ARQUIVO_JSON, []), ensure_ascii=False)};
+        let carrinho = [];
+        let categoriaAtiva = 'todos';
+        let termoBusca = '';
+
+        function extrairCategorias(produtos) {{
+            const categorias = new Set();
+            categorias.add('todos');
+            produtos.forEach(item => {{
+                if (item.categoria && item.categoria.trim()) categorias.add(item.categoria.trim());
+            }});
+            return Array.from(categorias);
+        }}
+
+        function contarPorCategoria(produtos, categoria) {{
+            if (categoria === 'todos') return produtos.length;
+            return produtos.filter(item => item.categoria && item.categoria.trim() === categoria).length;
+        }}
+
+        function gerarBotoesFiltro(produtos) {{
+            const container = document.getElementById('filtrosContainer');
+            const categorias = extrairCategorias(produtos);
+            let html = '';
+            categorias.forEach(cat => {{
+                const contagem = contarPorCategoria(produtos, cat);
+                const isAtivo = (categoriaAtiva === cat) ? 'ativo' : '';
+                const nomeExibicao = cat === 'todos' ? '📦 Todos' : cat;
+                html += `<button class="filtro-btn ${{isAtivo}}" data-categoria="${{cat}}" onclick="filtrarPorCategoria('${{cat}}')">${{nomeExibicao}} <span class="contagem">${{contagem}}</span></button>`;
+            }});
+            container.innerHTML = html;
+        }}
+
+        function filtrarPorCategoria(categoria) {{
+            categoriaAtiva = categoria;
+            document.querySelectorAll('.filtro-btn').forEach(btn => btn.classList.toggle('ativo', btn.dataset.categoria === categoria));
+            aplicarFiltros();
+        }}
+
+        function filtrarProdutos() {{
+            termoBusca = document.getElementById('searchInput').value.toLowerCase();
+            aplicarFiltros();
+        }}
+
+        function aplicarFiltros() {{
+            const termo = termoBusca || document.getElementById('searchInput').value.toLowerCase();
+            let produtosFiltrados = listaProdutos;
+            if (categoriaAtiva !== 'todos') {{
+                produtosFiltrados = produtosFiltrados.filter(item => item.categoria && item.categoria.trim() === categoriaAtiva);
+            }}
+            if (termo && termo.trim() !== '') {{
+                produtosFiltrados = produtosFiltrados.filter(item => 
+                    (item.nome && item.nome.toLowerCase().includes(termo)) || 
+                    (item.modelo && item.modelo.toLowerCase().includes(termo)) ||
+                    (item.descricao && item.descricao.toLowerCase().includes(termo)) ||
+                    (item.categoria && item.categoria.toLowerCase().includes(termo))
+                );
+            }}
+            exibirProdutos(produtosFiltrados);
+        }}
+
+        function exibirProdutos(produtos) {{
+            const vitrine = document.getElementById('vitrine');
+            vitrine.innerHTML = '';
+            if (produtos.length === 0) {{
+                vitrine.innerHTML = '<div class="sem-produtos">Nenhum produto encontrado.</div>';
+                return;
+            }}
+            produtos.forEach(item => {{
+                const destaqueBadge = item.destaque ? '<div class="badge-destaque">⭐ Destaque</div>' : '';
+                vitrine.innerHTML += `
+                    <div class="card">
+                        <div>
+                            <img src="${{item.imagem || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc'}}" alt="${{item.nome}}" onerror="this.src='https://images.unsplash.com/photo-1558981403-c5f9899a28bc'">
+                            ${{destaqueBadge}}
+                            <div class="card-body">
+                                <span class="categoria-tag">${{item.categoria || 'Geral'}}</span>
+                                <div class="card-title">${{item.nome}}</div>
+                                ${{item.modelo ? `<div class="card-modelo">${{item.modelo}}</div>` : ''}}
+                                ${{item.descricao ? `<div class="card-desc">${{item.descricao}}</div>` : ''}}
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <span class="preco">${{item.preco || 'R$ 0,00'}}</span>
+                            <button class="btn-adicionar" onclick="adicionarAoCarrinho('${{item.nome.replace(/'/g, "\\\\'")}}', '${{item.preco || 'R$ 0,00'}}')">Adicionar</button>
+                        </div>
+                    </div>
+                `;
+            }});
+        }}
+
+        function adicionarAoCarrinho(nome, preco) {{
+            carrinho.push({{ nome, preco }});
+            document.getElementById('contadorCarrinho').innerText = carrinho.length;
+            atualizarCarrinhoUI();
+            abrirCarrinho();
+        }}
+
+        function removerDoCarrinho(index) {{
+            carrinho.splice(index, 1);
+            document.getElementById('contadorCarrinho').innerText = carrinho.length;
+            atualizarCarrinhoUI();
+        }}
+
+        function atualizarCarrinhoUI() {{
+            const container = document.getElementById('listaCarrinho');
+            if (carrinho.length === 0) {{
+                container.innerHTML = '<p style="color: {text_muted}; text-align: center; margin-top: 40px;">O carrinho está vazio.</p>';
+                return;
+            }}
+            container.innerHTML = '';
+            carrinho.forEach((item, index) => {{
+                container.innerHTML += `
+                    <div class="item-carrinho">
+                        <div>
+                            <strong>${{item.nome}}</strong><br>
+                            <span style="color: #2ecc71;">${{item.preco}}</span>
+                        </div>
+                        <button class="btn-remover" onclick="removerDoCarrinho(${{index}})"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                `;
+            }});
+        }}
+
+        function abrirCarrinho() {{ document.getElementById('modalCarrinho').style.display = 'flex'; }}
+        function fecharCarrinho() {{ document.getElementById('modalCarrinho').style.display = 'none'; }}
+
+        function enviarPedidoWhatsApp() {{
+            if (carrinho.length === 0) return;
+            let texto = "Olá! Gostaria de fechar o seguinte pedido:%0A%0A";
+            carrinho.forEach((item, i) => {{
+                texto += `%23${{i+1}} - ${{item.nome}} (*${{item.preco}}*)%0A`;
+            }});
+            texto += "%0AConfirma a disponibilidade?";
+            window.open(`https://wa.me/${{numeroZap}}?text=${{texto}}`, '_blank');
+        }}
+
+        gerarBotoesFiltro(listaProdutos);
+        exibirProdutos(listaProdutos);
+    </script>
+</body>
+</html>
+"""
+    with open(ARQUIVO_HTML, "w", encoding="utf-8") as f:
+        f.write(html_conteudo)
+    
+    disparar_servidor_em_segundo_plano()
+
+# ===== FUNÇÕES DO ESTOQUE =====
 def main(page: ft.Page):
     global link_publico, tunel_ativo
     
@@ -315,7 +823,8 @@ def main(page: ft.Page):
         "whatsapp_contato": "5528999999999",
         "instagram_url": "https://instagram.com",
         "tema_site": "Escuro",
-        "nicho": "🏍️ Peças de Moto Usada"
+        "nicho": "🏍️ Peças de Moto Usada",
+        "adsense_id": ""  # >>> NOVO <<<
     })
     
     estoque = carregar_json(ARQUIVO_JSON, [])
@@ -528,385 +1037,6 @@ def main(page: ft.Page):
         page.open(ft.SnackBar(content=ft.Text(f"✅ Configurações para {nicho_escolhido} aplicadas!")))
         page.update()
 
-    # ===== GERAR SITE =====
-    def gerar_arquivo_site(nova_config):
-        nicho = nova_config.get("nicho", "🏍️ Peças de Moto Usada")
-        config_nicho = obter_config_nicho(nicho)
-        
-        cor_hex = nova_config.get("cor_principal", "#ff5722")
-        whatsapp_numero = nova_config.get("whatsapp_contato", "5528999999999")
-        instagram_link = nova_config.get("instagram_url", "https://instagram.com")
-        tema = nova_config.get("tema_site", "Escuro")
-        banners = nova_config.get("banners", [])
-        cnpj_info = nova_config.get("cnpj_empresa", "CNPJ: 00.000.000/0001-00")
-        logo_url = nova_config.get("logo_url", "")
-
-        if not banners or not banners[0].get("url"):
-            banners = [
-                {"url": "https://images.unsplash.com/photo-1558981403-c5f9899a28bc", "frase": config_nicho["banners"][0]},
-                {"url": "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87", "frase": config_nicho["banners"][1]},
-                {"url": "https://images.unsplash.com/photo-1609630875176-b800c92cf03d", "frase": config_nicho["banners"][2]}
-            ]
-
-        if tema == "Claro":
-            bg_body = "#f4f6f8"
-            bg_header = "#ffffff"
-            bg_card = "#ffffff"
-            text_main = "#222222"
-            text_muted = "#666666"
-            border_color = "#e0e0e0"
-            input_bg = "#ffffff"
-        else:
-            bg_body = "#121212"
-            bg_header = "#1a1a1a"
-            bg_card = "#1a1a1a"
-            text_main = "#f1f1f1"
-            text_muted = "#aaaaaa"
-            border_color = "#333333"
-            input_bg = "#121212"
-        
-        carousel_html = ""
-        for i, banner in enumerate(banners):
-            url = banner.get("url", "")
-            active = "active" if i == 0 else ""
-            carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
-        
-        html_conteudo = f"""<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{nova_config.get('nome_loja', 'Loja')}</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: 'Helvetica Neue', Arial, sans-serif; background: {bg_body}; color: {text_main}; }}
-        
-        header {{ display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: {bg_header}; border-bottom: 1px solid {border_color}; gap: 15px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }}
-        .logo-container {{ display: flex; align-items: center; }}
-        .logo {{ max-height: 80px !important; width: auto; object-fit: contain; display: block; }}
-        .search-header {{ flex: 1; max-width: 300px; min-width: 150px; }}
-        .search-header input {{ width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid {border_color}; background: {input_bg}; color: {text_main}; font-size: 0.9em; outline: none; }}
-        .search-header input:focus {{ border-color: {cor_hex}; }}
-        .header-actions {{ display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }}
-        .social-icons {{ display: flex; gap: 10px; align-items: center; }}
-        .social-icons a {{ color: {text_muted}; font-size: 20px; text-decoration: none; transition: color 0.3s; }}
-        .social-icons a.whatsapp:hover {{ color: #25d366; }}
-        .social-icons a.instagram:hover {{ color: #e1306c; }}
-        .btn-carrinho-topo {{ background: {cor_hex}; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 14px; transition: opacity 0.2s; }}
-        .btn-carrinho-topo:hover {{ opacity: 0.85; }}
-        
-        .carousel-container {{
-            position: relative;
-            width: 100%;
-            height: auto;
-            aspect-ratio: 16 / 9;
-            overflow: hidden;
-        }}
-        .carousel-slide {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-size: cover;
-            background-position: center;
-            opacity: 0;
-            transition: opacity 1.2s ease-in-out;
-        }}
-        .carousel-slide.active {{
-            opacity: 1;
-        }}
-        .carousel-slide::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.15);
-            z-index: 1;
-        }}
-        
-        .linha-destaque {{ height: 3px; background-color: {cor_hex}; width: 100%; }}
-        .container {{ max-width: 1100px; margin: 30px auto; padding: 0 15px; min-height: 400px; }}
-        h2 {{ font-size: 20px; text-transform: uppercase; letter-spacing: 1px; border-left: 4px solid {cor_hex}; padding-left: 10px; color: {text_main}; margin-bottom: 20px; }}
-        
-        .filtros-container {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid {border_color}; }}
-        .filtro-btn {{ padding: 6px 14px; border: 2px solid {border_color}; border-radius: 25px; background: transparent; color: {text_muted}; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-transform: capitalize; }}
-        .filtro-btn:hover, .filtro-btn.ativo {{ background: {cor_hex}; color: #fff; border-color: {cor_hex}; }}
-        .filtro-btn .contagem {{ display: inline-block; background: rgba(255,255,255,0.2); border-radius: 12px; padding: 0 8px; font-size: 11px; margin-left: 5px; }}
-        .filtro-btn.ativo .contagem {{ background: rgba(255,255,255,0.3); }}
-        
-        .grid-produtos {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 15px;
-        }}
-        .card {{
-            background: {bg_card};
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border: 1px solid {border_color};
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            transition: transform 0.2s;
-            position: relative;
-        }}
-        .card:hover {{ transform: translateY(-4px); }}
-        .card img {{
-            width: 100%;
-            height: 150px;
-            object-fit: cover;
-        }}
-        .badge-destaque {{ position: absolute; top: 10px; right: 10px; background: #ffd700; color: #000; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; z-index: 5; }}
-        .card-body {{ padding: 12px; }}
-        .categoria-tag {{ font-size: 11px; color: {cor_hex}; text-transform: uppercase; font-weight: bold; display: inline-block; margin-bottom: 4px; }}
-        .card-title {{ margin: 4px 0 6px 0; font-size: 16px; color: {text_main}; font-weight: bold; }}
-        .card-modelo, .card-desc {{ color: {text_muted}; font-size: 13px; margin-bottom: 3px; }}
-        .card-footer {{ display: flex; justify-content: space-between; align-items: center; padding: 0 12px 12px 12px; }}
-        .preco {{ font-size: 16px; font-weight: bold; color: #2ecc71; }}
-        .btn-adicionar {{ background: {cor_hex}; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: opacity 0.2s; }}
-        .btn-adicionar:hover {{ opacity: 0.85; }}
-        .sem-produtos {{ color: {text_muted}; text-align: center; padding: 40px 20px; grid-column: 1/-1; }}
-        
-        .modal-carrinho {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: flex-end; }}
-        .modal-conteudo {{ background: {bg_card}; width: 100%; max-width: 400px; height: 100%; padding: 25px; display: flex; flex-direction: column; justify-content: space-between; border-left: 1px solid {border_color}; animation: slideIn 0.3s ease; }}
-        @keyframes slideIn {{ from {{ transform: translateX(100%); }} to {{ transform: translateX(0); }} }}
-        .carrinho-header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid {border_color}; padding-bottom: 15px; }}
-        .carrinho-itens {{ flex: 1; overflow-y: auto; margin: 15px 0; }}
-        .item-carrinho {{ display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid {border_color}; font-size: 14px; }}
-        .btn-remover {{ color: #ff4d4d; background: none; border: none; cursor: pointer; font-size: 16px; }}
-        .carrinho-footer {{ border-top: 1px solid {border_color}; padding-top: 15px; }}
-        .btn-fechar-pedido {{ background: #25d366; color: #fff; width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }}
-        .btn-fechar-pedido:hover {{ background: #1ebd5b; }}
-        
-        footer {{ margin-top: 40px; padding: 30px 20px; background: {bg_header}; border-top: 1px solid {border_color}; text-align: center; color: {text_muted}; font-size: 13px; }}
-        footer p {{ margin: 5px 0; }}
-        
-        @media (max-width: 600px) {{
-            header {{ padding: 10px 15px; }}
-            .logo {{ max-height: 50px !important; }}
-            .search-header {{ max-width: 160px; min-width: 100px; }}
-            .btn-carrinho-topo {{ padding: 5px 10px; font-size: 11px; }}
-            .filtros-container {{ gap: 5px; }}
-            .filtro-btn {{ padding: 5px 10px; font-size: 11px; }}
-            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }}
-            .card img {{ height: 120px; }}
-            .carousel-container {{ aspect-ratio: 16 / 9; }}
-            .card-title {{ font-size: 14px; }}
-            .preco {{ font-size: 14px; }}
-        }}
-        @media (max-width: 400px) {{
-            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }}
-            .card img {{ height: 100px; }}
-        }}
-    </style>
-</head>
-<body>
-    <header>
-        <div class="logo-container">
-            {f'<img src="{logo_url}" class="logo" alt="Logo">' if logo_url else f'<h2 style="margin:0; border:none; padding:0; font-size:18px;">{nova_config.get("nome_loja")}</h2>'}
-        </div>
-        <div class="search-header">
-            <input type="text" id="searchInput" placeholder="Buscar..." onkeyup="filtrarProdutos()">
-        </div>
-        <div class="header-actions">
-            <button class="btn-carrinho-topo" onclick="abrirCarrinho()">
-                <i class="fa-solid fa-cart-shopping"></i> (<span id="contadorCarrinho">0</span>)
-            </button>
-            <div class="social-icons">
-                <a href="https://wa.me/{whatsapp_numero}" target="_blank" class="whatsapp"><i class="fa-brands fa-whatsapp"></i></a>
-                <a href="{instagram_link}" target="_blank" class="instagram"><i class="fa-brands fa-instagram"></i></a>
-            </div>
-        </div>
-    </header>
-    <div class="carousel-container" id="carousel">{carousel_html}</div>
-    <div class="linha-destaque"></div>
-    <div class="container">
-        <h2>Catálogo Disponível</h2>
-        <div class="filtros-container" id="filtrosContainer"></div>
-        <div class="grid-produtos" id="vitrine"></div>
-    </div>
-    <div class="modal-carrinho" id="modalCarrinho">
-        <div class="modal-conteudo">
-            <div class="carrinho-header">
-                <h3 style="margin:0; color:{text_main};">Seu Carrinho</h3>
-                <button onclick="fecharCarrinho()" style="background:none; border:none; color:{text_muted}; font-size:24px; cursor:pointer;"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="carrinho-itens" id="listaCarrinho">
-                <p style="color: {text_muted}; text-align: center; margin-top: 40px;">O carrinho está vazio.</p>
-            </div>
-            <div class="carrinho-footer">
-                <button class="btn-fechar-pedido" onclick="enviarPedidoWhatsApp()">Enviar Pedido no WhatsApp</button>
-            </div>
-        </div>
-    </div>
-    <footer>
-        <p><strong>{nova_config.get('nome_loja', 'Loja')}</strong> | {cnpj_info}</p>
-        <p>Compromisso com a qualidade.</p>
-    </footer>
-    <script>
-        let currentSlide = 0;
-        const slides = document.querySelectorAll('.carousel-slide');
-        if (slides.length > 1) {{
-            setInterval(() => {{
-                slides[currentSlide].classList.remove('active');
-                currentSlide = (currentSlide + 1) % slides.length;
-                slides[currentSlide].classList.add('active');
-            }}, 5000);
-        }}
-        const numeroZap = "{whatsapp_numero}";
-        let listaProdutos = {json.dumps(carregar_json(ARQUIVO_JSON, []), ensure_ascii=False)};
-        let carrinho = [];
-        let categoriaAtiva = 'todos';
-        let termoBusca = '';
-
-        function extrairCategorias(produtos) {{
-            const categorias = new Set();
-            categorias.add('todos');
-            produtos.forEach(item => {{
-                if (item.categoria && item.categoria.trim()) categorias.add(item.categoria.trim());
-            }});
-            return Array.from(categorias);
-        }}
-
-        function contarPorCategoria(produtos, categoria) {{
-            if (categoria === 'todos') return produtos.length;
-            return produtos.filter(item => item.categoria && item.categoria.trim() === categoria).length;
-        }}
-
-        function gerarBotoesFiltro(produtos) {{
-            const container = document.getElementById('filtrosContainer');
-            const categorias = extrairCategorias(produtos);
-            let html = '';
-            categorias.forEach(cat => {{
-                const contagem = contarPorCategoria(produtos, cat);
-                const isAtivo = (categoriaAtiva === cat) ? 'ativo' : '';
-                const nomeExibicao = cat === 'todos' ? '📦 Todos' : cat;
-                html += `<button class="filtro-btn ${{isAtivo}}" data-categoria="${{cat}}" onclick="filtrarPorCategoria('${{cat}}')">${{nomeExibicao}} <span class="contagem">${{contagem}}</span></button>`;
-            }});
-            container.innerHTML = html;
-        }}
-
-        function filtrarPorCategoria(categoria) {{
-            categoriaAtiva = categoria;
-            document.querySelectorAll('.filtro-btn').forEach(btn => btn.classList.toggle('ativo', btn.dataset.categoria === categoria));
-            aplicarFiltros();
-        }}
-
-        function filtrarProdutos() {{
-            termoBusca = document.getElementById('searchInput').value.toLowerCase();
-            aplicarFiltros();
-        }}
-
-        function aplicarFiltros() {{
-            const termo = termoBusca || document.getElementById('searchInput').value.toLowerCase();
-            let produtosFiltrados = listaProdutos;
-            if (categoriaAtiva !== 'todos') {{
-                produtosFiltrados = produtosFiltrados.filter(item => item.categoria && item.categoria.trim() === categoriaAtiva);
-            }}
-            if (termo && termo.trim() !== '') {{
-                produtosFiltrados = produtosFiltrados.filter(item => 
-                    (item.nome && item.nome.toLowerCase().includes(termo)) || 
-                    (item.modelo && item.modelo.toLowerCase().includes(termo)) ||
-                    (item.descricao && item.descricao.toLowerCase().includes(termo)) ||
-                    (item.categoria && item.categoria.toLowerCase().includes(termo))
-                );
-            }}
-            exibirProdutos(produtosFiltrados);
-        }}
-
-        function exibirProdutos(produtos) {{
-            const vitrine = document.getElementById('vitrine');
-            vitrine.innerHTML = '';
-            if (produtos.length === 0) {{
-                vitrine.innerHTML = '<div class="sem-produtos">Nenhum produto encontrado.</div>';
-                return;
-            }}
-            produtos.forEach(item => {{
-                const destaqueBadge = item.destaque ? '<div class="badge-destaque">⭐ Destaque</div>' : '';
-                vitrine.innerHTML += `
-                    <div class="card">
-                        <div>
-                            <img src="${{item.imagem || 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc'}}" alt="${{item.nome}}" onerror="this.src='https://images.unsplash.com/photo-1558981403-c5f9899a28bc'">
-                            ${{destaqueBadge}}
-                            <div class="card-body">
-                                <span class="categoria-tag">${{item.categoria || 'Geral'}}</span>
-                                <div class="card-title">${{item.nome}}</div>
-                                ${{item.modelo ? `<div class="card-modelo">${{item.modelo}}</div>` : ''}}
-                                ${{item.descricao ? `<div class="card-desc">${{item.descricao}}</div>` : ''}}
-                            </div>
-                        </div>
-                        <div class="card-footer">
-                            <span class="preco">${{item.preco || 'R$ 0,00'}}</span>
-                            <button class="btn-adicionar" onclick="adicionarAoCarrinho('${{item.nome.replace(/'/g, "\\\\'")}}', '${{item.preco || 'R$ 0,00'}}')">Adicionar</button>
-                        </div>
-                    </div>
-                `;
-            }});
-        }}
-
-        function adicionarAoCarrinho(nome, preco) {{
-            carrinho.push({{ nome, preco }});
-            document.getElementById('contadorCarrinho').innerText = carrinho.length;
-            atualizarCarrinhoUI();
-            abrirCarrinho();
-        }}
-
-        function removerDoCarrinho(index) {{
-            carrinho.splice(index, 1);
-            document.getElementById('contadorCarrinho').innerText = carrinho.length;
-            atualizarCarrinhoUI();
-        }}
-
-        function atualizarCarrinhoUI() {{
-            const container = document.getElementById('listaCarrinho');
-            if (carrinho.length === 0) {{
-                container.innerHTML = '<p style="color: {text_muted}; text-align: center; margin-top: 40px;">O carrinho está vazio.</p>';
-                return;
-            }}
-            container.innerHTML = '';
-            carrinho.forEach((item, index) => {{
-                container.innerHTML += `
-                    <div class="item-carrinho">
-                        <div>
-                            <strong>${{item.nome}}</strong><br>
-                            <span style="color: #2ecc71;">${{item.preco}}</span>
-                        </div>
-                        <button class="btn-remover" onclick="removerDoCarrinho(${{index}})"><i class="fa-solid fa-trash"></i></button>
-                    </div>
-                `;
-            }});
-        }}
-
-        function abrirCarrinho() {{ document.getElementById('modalCarrinho').style.display = 'flex'; }}
-        function fecharCarrinho() {{ document.getElementById('modalCarrinho').style.display = 'none'; }}
-
-        function enviarPedidoWhatsApp() {{
-            if (carrinho.length === 0) return;
-            let texto = "Olá! Gostaria de fechar o seguinte pedido:%0A%0A";
-            carrinho.forEach((item, i) => {{
-                texto += `%23${{i+1}} - ${{item.nome}} (*${{item.preco}}*)%0A`;
-            }});
-            texto += "%0AConfirma a disponibilidade?";
-            window.open(`https://wa.me/${{numeroZap}}?text=${{texto}}`, '_blank');
-        }}
-
-        gerarBotoesFiltro(listaProdutos);
-        exibirProdutos(listaProdutos);
-    </script>
-</body>
-</html>
-"""
-        with open(ARQUIVO_HTML, "w", encoding="utf-8") as f:
-            f.write(html_conteudo)
-        
-        disparar_servidor_em_segundo_plano()
-
-    # ===== FUNÇÕES DO ESTOQUE =====
     def atualizar_lista():
         lista_estoque.controls.clear()
         for item in estoque:
@@ -1179,6 +1309,7 @@ def main(page: ft.Page):
     txt_cnpj = ft.TextField(label="CNPJ ou Identificação", value=config.get("cnpj_empresa", ""))
     txt_whatsapp = ft.TextField(label="WhatsApp (Ex: 5528999999999)", value=config.get("whatsapp_contato", ""))
     txt_instagram = ft.TextField(label="Link do Instagram", value=config.get("instagram_url", ""))
+    txt_adsense = ft.TextField(label="Seu ID do AdSense (pub-xxxx)", value=config.get("adsense_id", ""), hint_text="Deixe em branco se não quiser anúncios")  # >>> NOVO <<<
 
     cor_atual_nome = "Vermelho Cinematográfico"
     for nome, codigo in cores_disponiveis.items():
@@ -1346,7 +1477,7 @@ def main(page: ft.Page):
         txt_status_hospedagem.value = "✅ Configuração carregada!"
         txt_status_hospedagem.color = "#4caf50"
 
-    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL CLOUDFLARE) =====
+    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL) =====
     def abrir_site_local_click(e):
         global link_publico, tunel_ativo
         
@@ -1358,7 +1489,7 @@ def main(page: ft.Page):
         # 1. Inicia o servidor local
         disparar_servidor_em_segundo_plano()
         
-        # 2. Inicia o túnel com Cloudflare (download automático)
+        # 2. Inicia o túnel com Cloudflare (com fallback)
         if not tunel_ativo:
             mensagem = iniciar_tunel_cloudflare()
             page.open(ft.SnackBar(content=ft.Text(mensagem)))
@@ -1369,14 +1500,14 @@ def main(page: ft.Page):
                 page.set_clipboard(link_publico)
                 page.open(ft.SnackBar(content=ft.Text(f"🔗 Link copiado: {link_publico}")))
             except:
-                page.open(ft.SnackBar(content=ft.Text(f"🔗 Link público: {link_publico}")))
+                page.open(ft.SnackBar(content=ft.Text(f"🔗 Link: {link_publico}")))
         
         # 4. Abre o site local
         webbrowser.open("http://localhost:8550")
         page.update()
 
     btn_abrir_site_local = ft.ElevatedButton(
-        "🌐 Abrir Site Local",
+        "🌐 Abrir Site Local / Gerar Link",
         on_click=abrir_site_local_click,
         icon=ft.Icons.WEB
     )
@@ -1477,7 +1608,8 @@ def main(page: ft.Page):
             "whatsapp_contato": txt_whatsapp.value,
             "instagram_url": txt_instagram.value,
             "tema_site": dropdown_tema.value,
-            "nicho": dropdown_nicho.value
+            "nicho": dropdown_nicho.value,
+            "adsense_id": txt_adsense.value  # >>> NOVO <<<
         }
         
         salvar_json(ARQUIVO_CONFIG, config)
@@ -1553,6 +1685,10 @@ def main(page: ft.Page):
         btn_selecionar_logo,
         txt_logo_nome,
         txt_whatsapp, txt_instagram,
+        ft.Divider(),
+        ft.Text("💰 Monetização (AdSense)", weight=ft.FontWeight.BOLD, size=14),  # >>> NOVO <<<
+        txt_adsense,  # >>> NOVO <<<
+        ft.Text("Cole seu ID do AdSense (ex: pub-1234567890123456) e os anúncios aparecerão no site gerado.", size=11, color="#888"),  # >>> NOVO <<<
         ft.Divider(),
         ft.Text("🖼️ Banners do Carrossel", weight=ft.FontWeight.BOLD, size=14),
         ft.Text("Banner 1", size=12),
