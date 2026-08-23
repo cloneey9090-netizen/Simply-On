@@ -68,14 +68,13 @@ tunel_ativo = False
 processo_tunel = None
 
 def obter_caminho_cloudflared():
-    """Retorna o caminho do binário cloudflared que já vem embutido no APK"""
+    """Retorna o caminho do binário cloudflared dentro dos assets do APK"""
     diretorio_base = os.path.dirname(os.path.abspath(__file__))
     
-    # Define o nome dependendo de onde você está testando (Windows ou Android)
     if sys.platform == "win32":
-        return os.path.join(diretorio_base, "bin", "cloudflared.exe")
+        return os.path.join(diretorio_base, "assets", "bin", "cloudflared.exe")
     else:
-        return os.path.join(diretorio_base, "bin", "cloudflared")
+        return os.path.join(diretorio_base, "assets", "bin", "cloudflared")
 
 def iniciar_tunel_cloudflare():
     global link_publico, tunel_ativo, processo_tunel
