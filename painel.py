@@ -68,13 +68,19 @@ tunel_ativo = False
 processo_tunel = None
 
 def obter_caminho_cloudflared():
-    """Retorna o caminho do binário cloudflared dentro dos assets do APK"""
+    """Retorna o caminho correto do binário cloudflared dentro da estrutura do Flet/Android"""
     diretorio_base = os.path.dirname(os.path.abspath(__file__))
     
     if sys.platform == "win32":
-        return os.path.join(diretorio_base, "assets", "bin", "cloudflared.exe")
+        return os.path.join(diretorio_base, "bin", "cloudflared.exe")
     else:
-        return os.path.join(diretorio_base, "assets", "bin", "cloudflared")
+        # No Android/Flet, os arquivos do projeto vão parar dentro da pasta 'assets'
+        caminho_com_assets = os.path.join(diretorio_base, "assets", "bin", "cloudflared")
+        if os.path.exists(caminho_com_assets):
+            return caminho_com_assets
+        
+        # Fallback caso rode em outro ambiente Linux comum
+        return os.path.join(diretorio_base, "bin", "cloudflared")
 
 def iniciar_tunel_cloudflare():
     global link_publico, tunel_ativo, processo_tunel
