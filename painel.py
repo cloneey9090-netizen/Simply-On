@@ -42,7 +42,6 @@ def carregar_json(arquivo, padrao):
 def salvar_json(arquivo, dados):
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
-
 # ===== SERVIDOR WEB LOCAL =====
 def iniciar_servidor_web():
     porta = 8550
@@ -63,70 +62,34 @@ def disparar_servidor_em_segundo_plano():
     t.start()
     time.sleep(1)
 
-# ===== TÚNEL COM CLOUDFLARE (DOWNLOAD AUTOMÁTICO) =====
+# ===== TÚNEL COM CLOUDFLARE (BINÁRIO EMBUTIDO) =====
 link_publico = ""
 tunel_ativo = False
 processo_tunel = None
 
-def baixar_cloudflared():
-    """Baixa o cloudflared para a pasta bin/ do app"""
-    global PASTA_BIN
+def obter_caminho_cloudflared():
+    """Retorna o caminho do binário cloudflared que já vem embutido no APK"""
+    diretorio_base = os.path.dirname(os.path.abspath(__file__))
     
-    # Detecta a plataforma para escolher o binário correto
-    is_windows = sys.platform == "win32"
-    is_android = "ANDROID_ROOT" in os.environ or "TERMUX" in os.environ
-    
-    if is_windows:
-        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared.exe")
-        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
-    elif is_android:
-        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
-        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+    # Define o nome dependendo de onde você está testando (Windows ou Android)
+    if sys.platform == "win32":
+        return os.path.join(diretorio_base, "bin", "cloudflared.exe")
     else:
-        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
-        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
-    
-    # Se já existe, retorna
-    if os.path.exists(cloudflared_path):
-        print(f"✅ cloudflared já existe em: {cloudflared_path}")
-        return cloudflared_path
-    
-    try:
-        print(f"📥 Baixando cloudflared de: {url}")
-        print("⏳ Isso pode levar alguns segundos...")
-        
-        # Baixa o arquivo
-        urllib.request.urlretrieve(url, cloudflared_path)
-        
-        # Dá permissão de execução (Linux/Android/Mac)
-        if not is_windows:
-            os.chmod(cloudflared_path, 0o755)
-        
-        print(f"✅ cloudflared baixado com sucesso! Tamanho: {os.path.getsize(cloudflared_path)} bytes")
-        return cloudflared_path
-        
-    except Exception as e:
-        print(f"❌ Erro ao baixar cloudflared: {e}")
-        return None
+        return os.path.join(diretorio_base, "bin", "cloudflared")
 
 def iniciar_tunel_cloudflare():
     global link_publico, tunel_ativo, processo_tunel
     
     try:
-        # 1. Baixa o binário se não existir
-        cloudflared_path = baixar_cloudflared()
-        if not cloudflared_path:
-            return "❌ Não foi possível baixar o cloudflared. Verifique sua internet."
+        cloudflared_path = obter_caminho_cloudflared()
         
-        # 2. Dá permissão de execução (essencial no Android/Linux)
-        try:
-            os.chmod(cloudflared_path, 0o755)
-        except:
-            pass
+        # Verifica se o arquivo realmente foi embutido no APK
+        if not os.path.exists(cloudflared_path):
+            return f"❌ Binário não encontrado em: {cloudflared_path}"
         
-        print(f"🚀 Iniciando túnel com: {cloudflared_path}")
+        print(f"🚀 Iniciando túnel com binário embutido: {cloudflared_path}")
         
-        # 3. Inicia o túnel
+        # Inicia o túnel diretamente (sem precisar de download ou chmod externo)
         if sys.platform == "win32":
             processo_tunel = subprocess.Popen(
                 [cloudflared_path, "tunnel", "--url", "http://localhost:8550"],
@@ -145,10 +108,9 @@ def iniciar_tunel_cloudflare():
                 bufsize=1
             )
         
-        # 4. Aguarda e captura o link
-        time.sleep(5)
+        # Aguarda e captura o link
+        time.sleep(3)
         
-        # Lê a saída para capturar o link
         for _ in range(60):
             line = processo_tunel.stdout.readline()
             if not line:
