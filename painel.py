@@ -17,7 +17,14 @@ import sys
 import socket
 import tempfile
 
-# ===== CONFIGURAÇÕES DE PASTAS =====
+# ============================================================
+# ===== SEU ID DO ADSENSE (FIXO) =============================
+# ============================================================
+MEU_ADSENSE_ID = "pub-1234567890123456"  # SUBSTITUA PELO SEU ID REAL
+
+# ============================================================
+# ===== CONFIGURAÇÕES DE PASTAS ==============================
+# ============================================================
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
 ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
@@ -26,7 +33,6 @@ ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
 PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
 
-# Cria as pastas necessárias
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
 if not os.path.exists(PASTA_BIN):
@@ -45,7 +51,15 @@ def salvar_json(arquivo, dados):
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
-# ===== OBTER IP LOCAL =====
+# ============================================================
+# ===== FUNÇÃO PARA ENDEREÇO DO SERVIDOR =====================
+# ============================================================
+def obter_endereco_servidor():
+    if 'ANDROID_ROOT' in os.environ:
+        return "127.0.0.1"  # Android
+    else:
+        return "localhost"   # PC
+
 def obter_ip_local():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -56,7 +70,9 @@ def obter_ip_local():
     except:
         return "127.0.0.1"
 
-# ===== SERVIDOR WEB LOCAL =====
+# ============================================================
+# ===== SERVIDOR WEB LOCAL ===================================
+# ============================================================
 def iniciar_servidor_web():
     porta = 8550
     diretorio_atual = os.path.dirname(os.path.abspath(__file__))
@@ -64,9 +80,9 @@ def iniciar_servidor_web():
     
     Handler = http.server.SimpleHTTPRequestHandler
     try:
-        with socketserver.ThreadingTCPServer(("", porta), Handler) as httpd:
+        with socketserver.ThreadingTCPServer(("0.0.0.0", porta), Handler) as httpd:
             print(f"🌐 Servidor rodando na porta {porta}")
-            print(f"📱 Acesse: http://localhost:{porta}")
+            print(f"📱 Acesse: http://{obter_endereco_servidor()}:{porta}")
             ip_local = obter_ip_local()
             print(f"📱 Na rede local: http://{ip_local}:{porta}")
             httpd.serve_forever()
@@ -78,15 +94,66 @@ def disparar_servidor_em_segundo_plano():
     t.start()
     time.sleep(2)
 
-# ===== TÚNEL COM CLOUDFLARE (COM FALLBACK) =====
+# ============================================================
+# ===== PIKOTUNNEL ===========================================
+# ============================================================
+def verificar_pikotunnel_instalado():
+    try:
+        resultado = subprocess.run(
+            ["pm", "list", "packages", "com.pikotunnel"],
+            capture_output=True,
+            text=True
+        )
+        return "com.pikotunnel" in resultado.stdout
+    except:
+        return False
+
+def abrir_pikotunnel(porta=8550):
+    if not verificar_pikotunnel_instalado():
+        webbrowser.open("https://play.google.com/store/apps/details?id=com.pikotunnel")
+        return "❌ PikoTunnel não está instalado. Baixe na Play Store."
+    
+    try:
+        comando = [
+            "am", "start",
+            "-n", "com.pikotunnel/.MainActivity",
+            "--es", "host", "127.0.0.1",
+            "--es", "port", str(porta),
+            "--ez", "auto_start", "true"
+        ]
+        subprocess.run(comando, check=True)
+        return f"✅ PikoTunnel iniciado para a porta {porta}."
+    except Exception as e:
+        return f"❌ Erro ao abrir PikoTunnel: {e}"
+
+def ler_link_pikotunnel():
+    """Tenta ler o último link gerado pelo PikoTunnel a partir do arquivo de log"""
+    try:
+        caminhos = [
+            "/sdcard/pikotunnel.log",
+            "/storage/emulated/0/pikotunnel.log",
+            "/data/data/com.pikotunnel/files/log.txt"
+        ]
+        for caminho in caminhos:
+            if os.path.exists(caminho):
+                with open(caminho, "r") as f:
+                    conteudo = f.read()
+                    match = re.search(r'https://[a-zA-Z0-9-]+\.pikotunnel\.com', conteudo)
+                    if match:
+                        return match.group()
+        return None
+    except:
+        return None
+
+# ============================================================
+# ===== TÚNEL CLOUDFLARE (FALLBACK) =========================
+# ============================================================
 link_publico = ""
 tunel_ativo = False
 processo_tunel = None
 
 def baixar_cloudflared():
-    """Baixa o cloudflared para a pasta bin/ do app"""
     global PASTA_BIN
-    
     is_windows = sys.platform == "win32"
     is_android = "ANDROID_ROOT" in os.environ or "TERMUX" in os.environ
     
@@ -101,43 +168,32 @@ def baixar_cloudflared():
         url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
     
     if os.path.exists(cloudflared_path):
-        print(f"✅ cloudflared já existe em: {cloudflared_path}")
         return cloudflared_path
     
     try:
         print(f"📥 Baixando cloudflared de: {url}")
-        print("⏳ Isso pode levar alguns segundos...")
-        
         urllib.request.urlretrieve(url, cloudflared_path)
-        
         if not is_windows:
             os.chmod(cloudflared_path, 0o755)
-        
-        print(f"✅ cloudflared baixado com sucesso! Tamanho: {os.path.getsize(cloudflared_path)} bytes")
         return cloudflared_path
-        
     except Exception as e:
         print(f"❌ Erro ao baixar cloudflared: {e}")
         return None
 
 def baixar_cloudflared_para_local():
-    """Baixa o cloudflared e tenta colocá-lo em um local executável"""
     cloudflared_path = baixar_cloudflared()
     if not cloudflared_path:
         return None
     
-    # Se estamos no Android, tenta copiar para /data/local/tmp (que permite execução)
     if 'ANDROID_ROOT' in os.environ:
         try:
             destino = "/data/local/tmp/cloudflared"
             shutil.copy2(cloudflared_path, destino)
             os.chmod(destino, 0o755)
-            print(f"✅ cloudflared copiado para: {destino}")
             return destino
         except Exception as e:
             print(f"⚠️ Não foi possível copiar para /data/local/tmp: {e}")
     
-    # Tenta dar permissão no caminho original
     try:
         os.chmod(cloudflared_path, 0o755)
         return cloudflared_path
@@ -145,7 +201,6 @@ def baixar_cloudflared_para_local():
         return None
 
 def iniciar_tunel_pinggy(porta=8550):
-    """Tenta criar túnel usando a API do Pinggy (gratuito, sem token)"""
     try:
         url = "https://pinggy.io/api/tunnels"
         data = {"port": porta}
@@ -159,7 +214,6 @@ def iniciar_tunel_pinggy(porta=8550):
         return None, str(e)
 
 def iniciar_tunel_serveo(porta=8550):
-    """Tenta criar túnel usando Serveo (via HTTP)"""
     try:
         response = requests.post(
             "https://serveo.net",
@@ -167,7 +221,6 @@ def iniciar_tunel_serveo(porta=8550):
             timeout=20
         )
         if response.status_code == 200:
-            import re
             match = re.search(r'https://[a-zA-Z0-9-]+\.serveo\.net', response.text)
             if match:
                 return match.group(), None
@@ -176,19 +229,15 @@ def iniciar_tunel_serveo(porta=8550):
         return None, str(e)
 
 def iniciar_tunel_cloudflare():
-    """Tenta iniciar o túnel usando cloudflared (com fallback para Pinggy/Serveo)"""
     global link_publico, tunel_ativo, processo_tunel
     
-    # --- TENTATIVA 1: Cloudflared com caminho alternativo ---
     try:
         cloudflared_path = baixar_cloudflared_para_local()
         if cloudflared_path and os.path.exists(cloudflared_path):
             os.chmod(cloudflared_path, 0o755)
-            print(f"🚀 Executando cloudflared de: {cloudflared_path}")
             
-            # No Android, usa sh -c para evitar problemas de permissão
             if 'ANDROID_ROOT' in os.environ:
-                comando = ["sh", "-c", f"{cloudflared_path} tunnel --url http://localhost:8550"]
+                comando = ["sh", "-c", f"{cloudflared_path} tunnel --url http://127.0.0.1:8550"]
             else:
                 comando = [cloudflared_path, "tunnel", "--url", "http://localhost:8550"]
             
@@ -200,45 +249,36 @@ def iniciar_tunel_cloudflare():
                 bufsize=1
             )
             
-            # Aguarda e captura o link
             time.sleep(5)
             for _ in range(30):
                 line = processo_tunel.stderr.readline() if processo_tunel.stderr else ""
                 if not line:
                     break
-                print(f"Cloudflare: {line.strip()}")
                 if "trycloudflare.com" in line:
-                    import re
                     match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
                     if match:
                         link_publico = match.group()
                         tunel_ativo = True
                         return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
             
-            # Se chegou aqui, não capturou o link, mas pode ainda estar iniciando
             time.sleep(10)
             if tunel_ativo and link_publico:
                 return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
     except Exception as e:
         print(f"❌ Erro no cloudflared: {e}")
     
-    # --- TENTATIVA 2: Pinggy (API) ---
-    print("🔄 Tentando Pinggy...")
     link, erro = iniciar_tunel_pinggy()
     if link:
         link_publico = link
         tunel_ativo = True
         return f"✅ Túnel Pinggy ativo! Link: {link}"
     
-    # --- TENTATIVA 3: Serveo ---
-    print("🔄 Tentando Serveo...")
     link, erro = iniciar_tunel_serveo()
     if link:
         link_publico = link
         tunel_ativo = True
         return f"✅ Túnel Serveo ativo! Link: {link}"
     
-    # --- FALLBACK: IP local ---
     ip = obter_ip_local()
     link_publico = f"http://{ip}:8550"
     tunel_ativo = True
@@ -252,14 +292,13 @@ def parar_tunel():
             processo_tunel = None
         tunel_ativo = False
         link_publico = ""
-        print("🔒 Túnel encerrado")
     except Exception as e:
         print(f"Erro ao encerrar túnel: {e}")
 
-# ===== CONFIGURAÇÕES DOS NICHOS =====
+# ============================================================
+# ===== CONFIGURAÇÕES DOS NICHOS =============================
+# ============================================================
 def obter_config_nicho(nicho_escolhido):
-    """Retorna configurações baseadas no nicho escolhido"""
-    
     configs = {
         "🏍️ Peças de Moto Usada": {
             "icone": "🏍️",
@@ -398,10 +437,11 @@ def obter_config_nicho(nicho_escolhido):
             "exemplos": ["Motor 1.0", "Pastilha de Freio", "Amortecedor Dianteiro", "Bateria 60Ah"]
         }
     }
-    
     return configs.get(nicho_escolhido, configs["🏍️ Peças de Moto Usada"])
 
-# ===== GERAR SITE =====
+# ============================================================
+# ===== GERAR SITE ===========================================
+# ============================================================
 def gerar_arquivo_site(nova_config):
     nicho = nova_config.get("nicho", "🏍️ Peças de Moto Usada")
     config_nicho = obter_config_nicho(nicho)
@@ -413,7 +453,9 @@ def gerar_arquivo_site(nova_config):
     banners = nova_config.get("banners", [])
     cnpj_info = nova_config.get("cnpj_empresa", "CNPJ: 00.000.000/0001-00")
     logo_url = nova_config.get("logo_url", "")
-    adsense_id = nova_config.get("adsense_id", "")  # >>> NOVO <<<
+    
+    # ===== ADSENSE FIXO =====
+    adsense_id = MEU_ADSENSE_ID
 
     if not banners or not banners[0].get("url"):
         banners = [
@@ -461,7 +503,6 @@ def gerar_arquivo_site(nova_config):
             </script>
         </div>
         """
-    # ===== FIM ADSENSE =====
     
     html_conteudo = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -800,7 +841,9 @@ def gerar_arquivo_site(nova_config):
     
     disparar_servidor_em_segundo_plano()
 
-# ===== FUNÇÕES DO ESTOQUE =====
+# ============================================================
+# ===== FUNÇÃO PRINCIPAL =====================================
+# ============================================================
 def main(page: ft.Page):
     global link_publico, tunel_ativo
     
@@ -808,6 +851,14 @@ def main(page: ft.Page):
     page.theme_mode = ft.ThemeMode.DARK
     page.window.width = 480
     page.window.height = 720
+
+    # ===== INTERCEPTAR TECLA "VOLTAR" =====
+    def on_keyboard(e: ft.KeyboardEvent):
+        if e.key == "Back":
+            page.open(ft.SnackBar(content=ft.Text("🔄 Use o botão Home ou minimize para manter o site ativo.")))
+            return True  # Consome o evento
+
+    page.on_keyboard_event = on_keyboard
 
     config = carregar_json(ARQUIVO_CONFIG, {
         "nome_loja": "Sua Loja", 
@@ -823,8 +874,7 @@ def main(page: ft.Page):
         "whatsapp_contato": "5528999999999",
         "instagram_url": "https://instagram.com",
         "tema_site": "Escuro",
-        "nicho": "🏍️ Peças de Moto Usada",
-        "adsense_id": ""  # >>> NOVO <<<
+        "nicho": "🏍️ Peças de Moto Usada"
     })
     
     estoque = carregar_json(ARQUIVO_JSON, [])
@@ -873,7 +923,7 @@ def main(page: ft.Page):
         icon=ft.Icons.FOLDER_OPEN
     )
 
-    # ===== LOGO (UPLOAD) =====
+    # ===== LOGO =====
     caminho_logo_selecionada = ""
     txt_logo_nome = ft.Text("📷 Nenhuma logo selecionada", size=12, color="#888")
     
@@ -900,7 +950,7 @@ def main(page: ft.Page):
         icon=ft.Icons.FOLDER_OPEN
     )
 
-    # ===== BANNER 1 =====
+    # ===== BANNERS =====
     caminho_banner1_selecionado = ""
     txt_banner1_nome = ft.Text("📷 Nenhum banner 1 selecionado", size=12, color="#888")
     
@@ -927,7 +977,6 @@ def main(page: ft.Page):
         icon=ft.Icons.FOLDER_OPEN
     )
 
-    # ===== BANNER 2 =====
     caminho_banner2_selecionado = ""
     txt_banner2_nome = ft.Text("📷 Nenhum banner 2 selecionado", size=12, color="#888")
     
@@ -954,7 +1003,6 @@ def main(page: ft.Page):
         icon=ft.Icons.FOLDER_OPEN
     )
 
-    # ===== BANNER 3 =====
     caminho_banner3_selecionado = ""
     txt_banner3_nome = ft.Text("📷 Nenhum banner 3 selecionado", size=12, color="#888")
     
@@ -996,7 +1044,6 @@ def main(page: ft.Page):
         "Marrom Conforto": "#795548"
     }
 
-    # ===== DROPDOWN DE NICHO =====
     nicho_opcoes = [
         "🏍️ Peças de Moto Usada",
         "🐶 PetShop / Animais",
@@ -1025,15 +1072,11 @@ def main(page: ft.Page):
     )
 
     def aplicar_nicho(nicho_escolhido):
-        """Aplica as configurações do nicho escolhido"""
         config_nicho = obter_config_nicho(nicho_escolhido)
-        
         txt_categoria.hint_text = f"Ex: {', '.join(config_nicho['categorias_padrao'][:4])}"
         txt_desc.hint_text = f"Ex: {config_nicho['descricao_padrao']}"
-        
         config["nicho"] = nicho_escolhido
         salvar_json(ARQUIVO_CONFIG, config)
-        
         page.open(ft.SnackBar(content=ft.Text(f"✅ Configurações para {nicho_escolhido} aplicadas!")))
         page.update()
 
@@ -1081,24 +1124,18 @@ def main(page: ft.Page):
             try:
                 if not os.path.exists(PASTA_IMAGENS):
                     os.makedirs(PASTA_IMAGENS)
-                
                 extensao = os.path.splitext(caminho_imagem_selecionada)[1]
                 nome_arquivo = f"produto_{item_novo['id']}{extensao}"
                 destino = os.path.join(PASTA_IMAGENS, nome_arquivo)
-                
                 shutil.copy2(caminho_imagem_selecionada, destino)
-                
                 imagem_final = f"imagens/{nome_arquivo}"
-                
                 caminho_imagem_selecionada = ""
                 txt_imagem_nome.value = "📷 Nenhuma imagem selecionada"
-                
             except Exception as ex:
                 print(f"Erro ao copiar imagem: {ex}")
                 imagem_final = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc"
         
         item_novo["imagem"] = imagem_final
-        
         estoque.append(item_novo)
         salvar_json(ARQUIVO_JSON, estoque)
         gerar_arquivo_site(config)
@@ -1174,7 +1211,9 @@ def main(page: ft.Page):
             page.open(ft.SnackBar(content=ft.Text(f"❌ Erro: {str(ex)}")))
             page.update()
 
-    # ===== FUNÇÕES DE HOSPEDAGEM =====
+    # ============================================================
+    # ===== FUNÇÕES DE HOSPEDAGEM =================================
+    # ============================================================
     def carregar_config_upload():
         padrao = {
             "servico": "Netlify",
@@ -1228,9 +1267,7 @@ def main(page: ft.Page):
         try:
             if not token:
                 return None, "Token não configurado"
-            
             os.chdir(pasta_do_site)
-            
             resultado = subprocess.run(
                 f"netlify deploy --prod --dir=. --site={site_name} --auth={token}",
                 shell=True,
@@ -1238,7 +1275,6 @@ def main(page: ft.Page):
                 text=True,
                 timeout=60
             )
-            
             for linha in resultado.stdout.split('\n'):
                 if 'Website URL' in linha:
                     url = linha.split(': ')[1].strip()
@@ -1247,9 +1283,7 @@ def main(page: ft.Page):
                     url = linha.split(' ')[-1].strip()
                     if url.startswith('https://'):
                         return url, None
-            
             return None, "Não foi possível encontrar o link do site"
-            
         except subprocess.TimeoutExpired:
             return None, "Tempo limite excedido"
         except Exception as e:
@@ -1259,20 +1293,15 @@ def main(page: ft.Page):
         try:
             if not token or not repo_nome:
                 return None, "Token ou repositório não configurado"
-            
             with open(ARQUIVO_HTML, "rb") as f:
                 conteudo = f.read()
-            
             conteudo_base64 = base64.b64encode(conteudo).decode('utf-8')
-            
             headers = {
                 "Authorization": f"token {token}",
                 "Accept": "application/vnd.github.v3+json"
             }
-            
             url_check = f"https://api.github.com/repos/{repo_nome}/contents/index.html"
             response_check = requests.get(url_check, headers=headers)
-            
             if response_check.status_code == 200:
                 sha = response_check.json()["sha"]
                 data = {
@@ -1289,27 +1318,25 @@ def main(page: ft.Page):
                     "branch": "main"
                 }
                 response = requests.put(url_check, headers=headers, json=data)
-            
             if response.status_code in [200, 201]:
                 url = f"https://{repo_nome.split('/')[0]}.github.io/{repo_nome.split('/')[1]}"
                 return url, None
             else:
                 return None, f"Erro ao enviar para GitHub: {response.status_code}"
-                
         except Exception as e:
             return None, f"Erro ao hospedar: {str(e)}"
 
-    # ===== CONFIGURAÇÕES =====
+    # ============================================================
+    # ===== CONFIGURAÇÕES ========================================
+    # ============================================================
     file_picker = ft.FilePicker()
     file_picker.on_result = importar_planilha_result
     page.overlay.append(file_picker)
-    page.update()
 
     txt_nome_loja = ft.TextField(label="Nome da Loja", value=config.get("nome_loja", ""))
     txt_cnpj = ft.TextField(label="CNPJ ou Identificação", value=config.get("cnpj_empresa", ""))
     txt_whatsapp = ft.TextField(label="WhatsApp (Ex: 5528999999999)", value=config.get("whatsapp_contato", ""))
     txt_instagram = ft.TextField(label="Link do Instagram", value=config.get("instagram_url", ""))
-    txt_adsense = ft.TextField(label="Seu ID do AdSense (pub-xxxx)", value=config.get("adsense_id", ""), hint_text="Deixe em branco se não quiser anúncios")  # >>> NOVO <<<
 
     cor_atual_nome = "Vermelho Cinematográfico"
     for nome, codigo in cores_disponiveis.items():
@@ -1329,7 +1356,9 @@ def main(page: ft.Page):
         options=[ft.dropdown.Option("Escuro"), ft.dropdown.Option("Claro")]
     )
 
-    # ===== PAINEL DE HOSPEDAGEM =====
+    # ============================================================
+    # ===== PAINEL DE HOSPEDAGEM =================================
+    # ============================================================
     txt_token = ft.TextField(
         label="🔑 Token de Acesso",
         hint_text="Cole aqui o token gerado no Netlify ou GitHub",
@@ -1477,7 +1506,45 @@ def main(page: ft.Page):
         txt_status_hospedagem.value = "✅ Configuração carregada!"
         txt_status_hospedagem.color = "#4caf50"
 
-    # ===== BOTÃO PARA ABRIR SITE LOCAL (COM TÚNEL) =====
+    # ============================================================
+    # ===== LINK PÚBLICO (EXIBIÇÃO PERSISTENTE) ==================
+    # ============================================================
+    link_exibicao = ft.Container(
+        content=ft.Column([
+            ft.Text("🔗 Link Público:", weight=ft.FontWeight.BOLD, size=14),
+            ft.Row([
+                ft.Text("Nenhum link gerado ainda", expand=True, id="link_text"),
+                ft.IconButton(
+                    icon=ft.Icons.COPY,
+                    tooltip="Copiar link",
+                    on_click=lambda e: copiar_link(e),
+                    disabled=True
+                ),
+            ]),
+        ]),
+        padding=10,
+        bgcolor="#1e1e1e",
+        border_radius=6,
+        margin=ft.margin.only(top=10),
+        visible=False
+    )
+
+    def mostrar_link(link):
+        link_exibicao.content.controls[1].controls[0].value = link
+        link_exibicao.content.controls[1].controls[1].disabled = False
+        link_exibicao.visible = True
+        page.update()
+
+    def copiar_link(e):
+        texto = link_exibicao.content.controls[1].controls[0].value
+        if texto and "Nenhum link" not in texto and "Verifique" not in texto:
+            page.set_clipboard(texto)
+            page.open(ft.SnackBar(content=ft.Text("✅ Link copiado!")))
+            page.update()
+
+    # ============================================================
+    # ===== BOTÃO ABRIR SITE LOCAL ===============================
+    # ============================================================
     def abrir_site_local_click(e):
         global link_publico, tunel_ativo
         
@@ -1486,24 +1553,29 @@ def main(page: ft.Page):
             page.update()
             return
         
-        # 1. Inicia o servidor local
         disparar_servidor_em_segundo_plano()
         
-        # 2. Inicia o túnel com Cloudflare (com fallback)
-        if not tunel_ativo:
-            mensagem = iniciar_tunel_cloudflare()
+        if 'ANDROID_ROOT' in os.environ:
+            # Android: usa PikoTunnel
+            mensagem = abrir_pikotunnel(8550)
             page.open(ft.SnackBar(content=ft.Text(mensagem)))
+            
+            link = ler_link_pikotunnel()
+            if link:
+                link_publico = link
+                mostrar_link(link_publico)
+            else:
+                link_publico = "📱 Verifique a notificação do PikoTunnel"
+                mostrar_link(link_publico)
+        else:
+            # PC: tenta cloudflared
+            if not tunel_ativo:
+                mensagem = iniciar_tunel_cloudflare()
+                page.open(ft.SnackBar(content=ft.Text(mensagem)))
+            if tunel_ativo and link_publico:
+                mostrar_link(link_publico)
         
-        # 3. Mostra o link se ativo
-        if tunel_ativo and link_publico:
-            try:
-                page.set_clipboard(link_publico)
-                page.open(ft.SnackBar(content=ft.Text(f"🔗 Link copiado: {link_publico}")))
-            except:
-                page.open(ft.SnackBar(content=ft.Text(f"🔗 Link: {link_publico}")))
-        
-        # 4. Abre o site local
-        webbrowser.open("http://localhost:8550")
+        webbrowser.open(f"http://{obter_endereco_servidor()}:8550")
         page.update()
 
     btn_abrir_site_local = ft.ElevatedButton(
@@ -1512,7 +1584,9 @@ def main(page: ft.Page):
         icon=ft.Icons.WEB
     )
 
-    # ===== SALVAR CONFIGURAÇÕES =====
+    # ============================================================
+    # ===== SALVAR CONFIGURAÇÕES =================================
+    # ============================================================
     def salvar_config(e):
         nonlocal config, caminho_logo_selecionada, caminho_banner1_selecionado, caminho_banner2_selecionado, caminho_banner3_selecionado
         
@@ -1608,8 +1682,7 @@ def main(page: ft.Page):
             "whatsapp_contato": txt_whatsapp.value,
             "instagram_url": txt_instagram.value,
             "tema_site": dropdown_tema.value,
-            "nicho": dropdown_nicho.value,
-            "adsense_id": txt_adsense.value  # >>> NOVO <<<
+            "nicho": dropdown_nicho.value
         }
         
         salvar_json(ARQUIVO_CONFIG, config)
@@ -1617,7 +1690,9 @@ def main(page: ft.Page):
         page.open(ft.SnackBar(content=ft.Text("✅ Configurações salvas e Site gerado!")))
         page.update()
 
-    # ===== COLUNAS =====
+    # ============================================================
+    # ===== COLUNAS ==============================================
+    # ============================================================
     coluna_hospedagem = ft.Column([
         ft.Text("🌐 HOSPEDAGEM AUTOMÁTICA", weight=ft.FontWeight.BOLD, size=18),
         ft.Text("Configure seu token para hospedar sites com um clique", size=13, color="#888"),
@@ -1673,6 +1748,7 @@ def main(page: ft.Page):
             ft.ElevatedButton(content=ft.Text("Salvar Item"), on_click=salvar_peca),
             btn_abrir_site_local,
         ], wrap=True),
+        link_exibicao,  # <--- CARTÃO DO LINK
         ft.Divider(),
         ft.Text("📋 Gerenciar Estoque", weight=ft.FontWeight.BOLD, size=16),
         lista_estoque
@@ -1685,10 +1761,6 @@ def main(page: ft.Page):
         btn_selecionar_logo,
         txt_logo_nome,
         txt_whatsapp, txt_instagram,
-        ft.Divider(),
-        ft.Text("💰 Monetização (AdSense)", weight=ft.FontWeight.BOLD, size=14),  # >>> NOVO <<<
-        txt_adsense,  # >>> NOVO <<<
-        ft.Text("Cole seu ID do AdSense (ex: pub-1234567890123456) e os anúncios aparecerão no site gerado.", size=11, color="#888"),  # >>> NOVO <<<
         ft.Divider(),
         ft.Text("🖼️ Banners do Carrossel", weight=ft.FontWeight.BOLD, size=14),
         ft.Text("Banner 1", size=12),
