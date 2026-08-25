@@ -1259,7 +1259,6 @@ def main(page: ft.Page):
         except:
             return False
 
-    # NOVA FUNÇÃO CORRIGIDA USANDO API REST
     def hospedar_netlify(pasta_do_site, token, site_name):
         try:
             if not token:
@@ -1268,7 +1267,6 @@ def main(page: ft.Page):
             headers = {"Authorization": f"Bearer {token}"}
             url_sites = "https://api.netlify.com/api/v1/sites"
             
-            # 1. Listar sites para ver se já existe
             response = requests.get(url_sites, headers=headers)
             if response.status_code != 200:
                 return None, f"Erro ao listar sites. Status: {response.status_code} - {response.text}"
@@ -1280,7 +1278,6 @@ def main(page: ft.Page):
                     site_id = site["id"]
                     break
             
-            # 2. Se não existir, cria
             if not site_id:
                 create_data = {"name": site_name}
                 response = requests.post(url_sites, headers=headers, json=create_data)
@@ -1288,7 +1285,6 @@ def main(page: ft.Page):
                     return None, f"Erro ao criar site: {response.status_code} - {response.text}"
                 site_id = response.json()["id"]
             
-            # 3. Lê o index.html
             index_path = os.path.join(pasta_do_site, "index.html")
             if not os.path.exists(index_path):
                 return None, "Arquivo index.html não encontrado"
@@ -1296,7 +1292,6 @@ def main(page: ft.Page):
             with open(index_path, "rb") as f:
                 conteudo = f.read()
             
-            # 4. Faz o upload via deploy
             deploy_url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
             files = {"file": ("index.html", conteudo, "text/html")}
             response = requests.post(deploy_url, headers=headers, files=files)
@@ -1304,7 +1299,6 @@ def main(page: ft.Page):
             if response.status_code not in [200, 201, 202]:
                 return None, f"Erro no deploy: {response.status_code} - {response.text}"
             
-            # 5. Obtém a URL
             site_info = requests.get(f"{url_sites}/{site_id}", headers=headers).json()
             url = f"https://{site_info['subdomain']}.netlify.app"
             if site_info.get("custom_domain"):
@@ -1535,11 +1529,14 @@ def main(page: ft.Page):
     # ============================================================
     # ===== LINK PÚBLICO (EXIBIÇÃO PERSISTENTE) ==================
     # ============================================================
+    # Cria uma referência para o texto do link
+    link_text = ft.Text("Nenhum link gerado ainda", expand=True)
+
     link_exibicao = ft.Container(
         content=ft.Column([
             ft.Text("🔗 Link Público:", weight=ft.FontWeight.BOLD, size=14),
             ft.Row([
-                ft.Text("Nenhum link gerado ainda", expand=True, id="link_text"),
+                link_text,
                 ft.IconButton(
                     icon=ft.Icons.COPY,
                     tooltip="Copiar link",
@@ -1556,13 +1553,13 @@ def main(page: ft.Page):
     )
 
     def mostrar_link(link):
-        link_exibicao.content.controls[1].controls[0].value = link
+        link_text.value = link
         link_exibicao.content.controls[1].controls[1].disabled = False
         link_exibicao.visible = True
         page.update()
 
     def copiar_link(e):
-        texto = link_exibicao.content.controls[1].controls[0].value
+        texto = link_text.value
         if texto and "Nenhum link" not in texto and "Verifique" not in texto:
             page.set_clipboard(texto)
             page.open(ft.SnackBar(content=ft.Text("✅ Link copiado!")))
@@ -1749,22 +1746,10 @@ def main(page: ft.Page):
     atualizar_lista()
 
     # ============================================================
-    # ===== ANÚNCIO ADMOB (BANNER) ================================
+    # ===== ANÚNCIO ADMOB (BANNER) - REMOVIDO POR ENQUANTO =====
     # ============================================================
-    # Placeholder: você pode substituir por uma WebView com o código do AdMob
-    # ou por um container com uma imagem estática até integrar.
-    banner_admob = ft.Container(
-        content=ft.Row([
-            ft.Icon(ft.Icons.ADS_CLICK, size=20, color="#4caf50"),
-            ft.Text("Anúncio (AdMob) - Seu espaço aqui", size=12, color="#888"),
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        height=50,
-        bgcolor="#1e1e1e",
-        border=ft.border.all(1, "#333333"),
-        border_radius=4,
-        margin=ft.margin.only(top=10),
-        padding=10,
-    )
+    # O banner foi removido para não causar confusão.
+    # Se quiser adicionar depois, é só descomentar.
 
     coluna_cadastro = ft.Column([
         ft.Text("📌 Tipo de Comércio", weight=ft.FontWeight.BOLD, size=16),
@@ -1790,8 +1775,7 @@ def main(page: ft.Page):
             ft.ElevatedButton(content=ft.Text("Salvar Item"), on_click=salvar_peca),
             btn_abrir_site_local,
         ], wrap=True),
-        link_exibicao,  # link público
-        banner_admob,   # ANÚNCIO ADMOB AQUI
+        link_exibicao,
         ft.Divider(),
         ft.Text("📋 Gerenciar Estoque", weight=ft.FontWeight.BOLD, size=16),
         lista_estoque
