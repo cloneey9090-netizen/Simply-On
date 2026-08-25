@@ -56,9 +56,9 @@ def salvar_json(arquivo, dados):
 # ============================================================
 def obter_endereco_servidor():
     if 'ANDROID_ROOT' in os.environ:
-        return "127.0.0.1"  # Android
+        return "127.0.0.1"
     else:
-        return "localhost"   # PC
+        return "localhost"
 
 def obter_ip_local():
     try:
@@ -127,7 +127,6 @@ def abrir_pikotunnel(porta=8550):
         return f"❌ Erro ao abrir PikoTunnel: {e}"
 
 def ler_link_pikotunnel():
-    """Tenta ler o último link gerado pelo PikoTunnel a partir do arquivo de log"""
     try:
         caminhos = [
             "/sdcard/pikotunnel.log",
@@ -453,8 +452,6 @@ def gerar_arquivo_site(nova_config):
     banners = nova_config.get("banners", [])
     cnpj_info = nova_config.get("cnpj_empresa", "CNPJ: 00.000.000/0001-00")
     logo_url = nova_config.get("logo_url", "")
-    
-    # ===== ADSENSE FIXO =====
     adsense_id = MEU_ADSENSE_ID
 
     if not banners or not banners[0].get("url"):
@@ -487,7 +484,6 @@ def gerar_arquivo_site(nova_config):
         active = "active" if i == 0 else ""
         carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
 
-    # ===== ADSENSE HTML =====
     adsense_html = ""
     if adsense_id:
         adsense_html = f"""
@@ -856,7 +852,7 @@ def main(page: ft.Page):
     def on_keyboard(e: ft.KeyboardEvent):
         if e.key == "Back":
             page.open(ft.SnackBar(content=ft.Text("🔄 Use o botão Home ou minimize para manter o site ativo.")))
-            return True  # Consome o evento
+            return True
 
     page.on_keyboard_event = on_keyboard
 
@@ -1212,7 +1208,7 @@ def main(page: ft.Page):
             page.update()
 
     # ============================================================
-    # ===== FUNÇÕES DE HOSPEDAGEM =================================
+    # ===== FUNÇÕES DE HOSPEDAGEM (VIA API REST) =================
     # ============================================================
     def carregar_config_upload():
         padrao = {
@@ -1263,29 +1259,59 @@ def main(page: ft.Page):
         except:
             return False
 
+    # NOVA FUNÇÃO CORRIGIDA USANDO API REST
     def hospedar_netlify(pasta_do_site, token, site_name):
         try:
             if not token:
                 return None, "Token não configurado"
-            os.chdir(pasta_do_site)
-            resultado = subprocess.run(
-                f"netlify deploy --prod --dir=. --site={site_name} --auth={token}",
-                shell=True,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
-            for linha in resultado.stdout.split('\n'):
-                if 'Website URL' in linha:
-                    url = linha.split(': ')[1].strip()
-                    return url, None
-                if 'URL' in linha and 'https://' in linha:
-                    url = linha.split(' ')[-1].strip()
-                    if url.startswith('https://'):
-                        return url, None
-            return None, "Não foi possível encontrar o link do site"
-        except subprocess.TimeoutExpired:
-            return None, "Tempo limite excedido"
+            
+            headers = {"Authorization": f"Bearer {token}"}
+            url_sites = "https://api.netlify.com/api/v1/sites"
+            
+            # 1. Listar sites para ver se já existe
+            response = requests.get(url_sites, headers=headers)
+            if response.status_code != 200:
+                return None, f"Erro ao listar sites. Status: {response.status_code} - {response.text}"
+            
+            sites = response.json()
+            site_id = None
+            for site in sites:
+                if site.get("name") == site_name:
+                    site_id = site["id"]
+                    break
+            
+            # 2. Se não existir, cria
+            if not site_id:
+                create_data = {"name": site_name}
+                response = requests.post(url_sites, headers=headers, json=create_data)
+                if response.status_code not in [200, 201]:
+                    return None, f"Erro ao criar site: {response.status_code} - {response.text}"
+                site_id = response.json()["id"]
+            
+            # 3. Lê o index.html
+            index_path = os.path.join(pasta_do_site, "index.html")
+            if not os.path.exists(index_path):
+                return None, "Arquivo index.html não encontrado"
+            
+            with open(index_path, "rb") as f:
+                conteudo = f.read()
+            
+            # 4. Faz o upload via deploy
+            deploy_url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
+            files = {"file": ("index.html", conteudo, "text/html")}
+            response = requests.post(deploy_url, headers=headers, files=files)
+            
+            if response.status_code not in [200, 201, 202]:
+                return None, f"Erro no deploy: {response.status_code} - {response.text}"
+            
+            # 5. Obtém a URL
+            site_info = requests.get(f"{url_sites}/{site_id}", headers=headers).json()
+            url = f"https://{site_info['subdomain']}.netlify.app"
+            if site_info.get("custom_domain"):
+                url = f"https://{site_info['custom_domain']}"
+            
+            return url, None
+            
         except Exception as e:
             return None, f"Erro ao hospedar: {str(e)}"
 
@@ -1368,7 +1394,7 @@ def main(page: ft.Page):
     
     txt_nome_site = ft.TextField(
         label="📝 Nome do Site (Netlify)",
-        hint_text="Ex: loja-do-joao",
+        hint_text="Ex: vitrine",
         width=400
     )
     
@@ -1556,10 +1582,8 @@ def main(page: ft.Page):
         disparar_servidor_em_segundo_plano()
         
         if 'ANDROID_ROOT' in os.environ:
-            # Android: usa PikoTunnel
             mensagem = abrir_pikotunnel(8550)
             page.open(ft.SnackBar(content=ft.Text(mensagem)))
-            
             link = ler_link_pikotunnel()
             if link:
                 link_publico = link
@@ -1568,7 +1592,6 @@ def main(page: ft.Page):
                 link_publico = "📱 Verifique a notificação do PikoTunnel"
                 mostrar_link(link_publico)
         else:
-            # PC: tenta cloudflared
             if not tunel_ativo:
                 mensagem = iniciar_tunel_cloudflare()
                 page.open(ft.SnackBar(content=ft.Text(mensagem)))
@@ -1579,9 +1602,10 @@ def main(page: ft.Page):
         page.update()
 
     btn_abrir_site_local = ft.ElevatedButton(
-        "🌐 Abrir Site Local / Gerar Link",
+        "📤 Compartilhar Meu Catálogo",
         on_click=abrir_site_local_click,
-        icon=ft.Icons.WEB
+        icon=ft.Icons.SHARE,
+        width=200,
     )
 
     # ============================================================
@@ -1724,6 +1748,24 @@ def main(page: ft.Page):
 
     atualizar_lista()
 
+    # ============================================================
+    # ===== ANÚNCIO ADMOB (BANNER) ================================
+    # ============================================================
+    # Placeholder: você pode substituir por uma WebView com o código do AdMob
+    # ou por um container com uma imagem estática até integrar.
+    banner_admob = ft.Container(
+        content=ft.Row([
+            ft.Icon(ft.Icons.ADS_CLICK, size=20, color="#4caf50"),
+            ft.Text("Anúncio (AdMob) - Seu espaço aqui", size=12, color="#888"),
+        ], alignment=ft.MainAxisAlignment.CENTER),
+        height=50,
+        bgcolor="#1e1e1e",
+        border=ft.border.all(1, "#333333"),
+        border_radius=4,
+        margin=ft.margin.only(top=10),
+        padding=10,
+    )
+
     coluna_cadastro = ft.Column([
         ft.Text("📌 Tipo de Comércio", weight=ft.FontWeight.BOLD, size=16),
         dropdown_nicho,
@@ -1748,7 +1790,8 @@ def main(page: ft.Page):
             ft.ElevatedButton(content=ft.Text("Salvar Item"), on_click=salvar_peca),
             btn_abrir_site_local,
         ], wrap=True),
-        link_exibicao,  # <--- CARTÃO DO LINK
+        link_exibicao,  # link público
+        banner_admob,   # ANÚNCIO ADMOB AQUI
         ft.Divider(),
         ft.Text("📋 Gerenciar Estoque", weight=ft.FontWeight.BOLD, size=16),
         lista_estoque
