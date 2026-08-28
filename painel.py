@@ -905,25 +905,27 @@ def main(page: ft.Page):
             msg_erro.value = "❌ Senha incorreta! Tente novamente."
             page.update()
 
-    # Tela de ativação (com splash)
-    tela_ativacao = ft.Container(
-        content=ft.Column([
-            ft.Image(src="assets/splash.png", width=200, height=200),
-            
-            ft.Text("🔐 Ativação Necessária", size=24, weight=ft.FontWeight.BOLD),
-            ft.Text("Seu ID:", size=14, color="#888"),
-            ft.Text(f"{id_dispositivo}", size=16, weight=ft.FontWeight.BOLD, color="#4caf50"),
-            ft.ElevatedButton("📱 Solicitar Ativação (WhatsApp)", on_click=solicitar_ativacao),
-            ft.Divider(height=20),
-            ft.Text("Digite a senha recebida:", size=14, color="#888"),
-            senha_input,
-            msg_erro,
-            ft.ElevatedButton("🔓 Ativar", on_click=verificar_senha),
-        ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-        alignment=ft.alignment.center,
-        bgcolor="#1a1a1a",
-        expand=True
-    )
+    # Tela de ativação (com splash em tela cheia)
+tela_ativacao = ft.Container(
+    expand=True,  # ocupa a tela inteira
+    image=ft.DecorationImage(
+        src="assets/splash.png",
+        fit=ft.ImageFit.COVER,  # cobre a tela toda sem distorcer
+    ),
+    content=ft.Column([
+        ft.Container(expand=True),  # espaçador para centralizar o conteúdo
+        ft.Text("🔐 Ativação Necessária", size=28, weight=ft.FontWeight.BOLD, color="white"),
+        ft.Text("Seu ID:", size=16, color="#aaaaaa"),
+        ft.Text(f"{id_dispositivo}", size=18, weight=ft.FontWeight.BOLD, color="#4caf50"),
+        ft.ElevatedButton("📱 Solicitar Ativação (WhatsApp)", on_click=solicitar_ativacao),
+        ft.Divider(height=20, color="transparent"),
+        ft.Text("Digite a senha recebida:", size=14, color="#aaaaaa"),
+        senha_input,
+        msg_erro,
+        ft.ElevatedButton("🔓 Ativar", on_verificar_senha),
+        ft.Container(expand=True),  # espaçador para centralizar
+    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+)
 
     page.add(tela_ativacao)
     page.update()
