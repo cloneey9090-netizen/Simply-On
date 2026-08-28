@@ -101,7 +101,7 @@ def obter_id_dispositivo():
 
 def gerar_senha_por_id(id_dispositivo):
     """Gera uma senha de 8 caracteres baseada no ID + segredo"""
-    SEGREDO = "VITRINE2025"  # ← Mude para uma palavra sua
+    SEGREDO = "MEU_SEGREDO_SUPER_SECRETO_2025"  # Mude para uma palavra sua
     return hashlib.sha256((id_dispositivo + SEGREDO).encode()).hexdigest()[:8].upper()
 
 # ============================================================
@@ -884,17 +884,14 @@ def main(page: ft.Page):
     page.window.width = 480
     page.window.height = 720
 
-    # ============================================================
-    # ===== TELA DE ATIVAÇÃO ======================================
-    # ============================================================
+    # ===== TELA DE ATIVAÇÃO =====
     id_dispositivo = obter_id_dispositivo()
     senha_input = ft.TextField(label="Senha de ativação", password=True, width=300)
     msg_erro = ft.Text("", color="red", size=14)
 
     def solicitar_ativacao(e):
-        """Abre o WhatsApp com o ID do dispositivo"""
         mensagem = f"Olá! Meu ID de ativação é: {id_dispositivo}. Por favor, me envie a senha."
-        webbrowser.open(f"https://wa.me/5528988049598?text={mensagem}")  # ← Coloque seu número com DDD
+        webbrowser.open(f"https://wa.me/55SEUNUMERO?text={mensagem}")  # ← Coloque seu número com DDD
 
     def verificar_senha(e):
         senha_correta = gerar_senha_por_id(id_dispositivo)
@@ -905,34 +902,42 @@ def main(page: ft.Page):
             msg_erro.value = "❌ Senha incorreta! Tente novamente."
             page.update()
 
-    # Tela de ativação (com splash em tela cheia)
-tela_ativacao = ft.Container(
-    expand=True,  # ocupa a tela inteira
-    image=ft.DecorationImage(
-        src="assets/splash.png",
-        fit=ft.ImageFit.COVER,  # cobre a tela toda sem distorcer
-    ),
-    content=ft.Column([
-        ft.Container(expand=True),  # espaçador para centralizar o conteúdo
-        ft.Text("🔐 Ativação Necessária", size=28, weight=ft.FontWeight.BOLD, color="white"),
-        ft.Text("Seu ID:", size=16, color="#aaaaaa"),
-        ft.Text(f"{id_dispositivo}", size=18, weight=ft.FontWeight.BOLD, color="#4caf50"),
-        ft.ElevatedButton("📱 Solicitar Ativação (WhatsApp)", on_click=solicitar_ativacao),
-        ft.Divider(height=20, color="transparent"),
-        ft.Text("Digite a senha recebida:", size=14, color="#aaaaaa"),
-        senha_input,
-        msg_erro,
-        ft.ElevatedButton("🔓 Ativar", on_verificar_senha),
-        ft.Container(expand=True),  # espaçador para centralizar
-    ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-)
+    # Splash em tela cheia (com a imagem expandida)
+    tela_ativacao = ft.Container(
+        content=ft.Column([
+            # Imagem em tela cheia (expandida e cobrindo a tela)
+            ft.Image(
+                src="assets/splash.png",
+                expand=True,
+                fit=ft.ImageFit.COVER,  # Cobrir a tela inteira
+            ),
+            # Textos sobrepostos (centralizados)
+            ft.Container(
+                content=ft.Column([
+                    ft.Text("SimplyON", size=40, weight=ft.FontWeight.BOLD, color="#ff5722"),
+                    ft.Text("Seu negócio no ar,\nsimplesmente online", size=18, color="white", text_align=ft.TextAlign.CENTER),
+                    ft.Divider(height=20, color="transparent"),
+                    ft.Text(f"ID: {id_dispositivo}", size=14, color="#4caf50"),
+                    ft.ElevatedButton("📱 Solicitar Ativação (WhatsApp)", on_click=solicitar_ativacao),
+                    ft.Divider(height=10, color="transparent"),
+                    ft.Text("Digite a senha recebida:", size=14, color="#888"),
+                    senha_input,
+                    msg_erro,
+                    ft.ElevatedButton("🔓 Ativar", on_click=verificar_senha),
+                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.center,
+                expand=True,
+            ),
+        ], alignment=ft.MainAxisAlignment.CENTER),
+        alignment=ft.alignment.center,
+        bgcolor="#1a1a1a",
+        expand=True
+    )
 
     page.add(tela_ativacao)
     page.update()
 
-    # ============================================================
-    # ===== APP PRINCIPAL =========================================
-    # ============================================================
+    # ===== APP PRINCIPAL =====
     def carregar_app_principal(page):
         # ===== INTERCEPTAR TECLA "VOLTAR" =====
         def on_keyboard(e: ft.KeyboardEvent):
@@ -1967,7 +1972,6 @@ tela_ativacao = ft.Container(
         page.add(painel_conteudo)
 
     # O app principal só é carregado se a senha for correta (já chamado dentro de verificar_senha)
-    # Mas precisamos definir a função antes de usar, então ela já foi definida acima.
 
 if __name__ == "__main__":
     ft.app(target=main)
