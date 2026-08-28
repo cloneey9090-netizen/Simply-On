@@ -1,0 +1,7 @@
+[tool.flet]
+project_name = "SimplyON"
+description = "Crie seu site em 5 minutos"
+version = "1.0.0"
+
+[tool.flet.android]
+icon = "assets/icone.png"
