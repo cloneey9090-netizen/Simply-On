@@ -31,9 +31,15 @@ jobs:
       - name: Setup Flutter (versão compatível)
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'  # <-- MUDOU PARA 3.24.0
+          flutter-version: '3.24.0'
           channel: 'stable'
-          cache: true
+          cache: false   # <-- CACHE DESABILITADO PARA FORÇAR RECARGA
+
+      - name: Limpar cache e builds antigos
+        run: |
+          flutter clean
+          rm -rf build/
+          rm -rf .dart_tool/
 
       - name: Gerar APK com Flet
         run: |
