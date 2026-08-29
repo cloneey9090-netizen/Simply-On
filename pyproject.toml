@@ -1,5 +1,6 @@
 [tool.flet]
 project_name = "SimplyON"
+package_name = "com.simplyon.app"   # ← FORÇA O NOME DO PACOTE
 description = "Crie seu site em 5 minutos"
 version = "1.0.0"
 
