@@ -101,7 +101,7 @@ def obter_id_dispositivo():
 
 def gerar_senha_por_id(id_dispositivo):
     """Gera uma senha de 8 caracteres baseada no ID + segredo"""
-    SEGREDO = "MEU_SEGREDO_SUPER_SECRETO_2025"  # Mude para uma palavra sua
+    SEGREDO = "VITRINE2025"  # Mude para uma palavra sua
     return hashlib.sha256((id_dispositivo + SEGREDO).encode()).hexdigest()[:8].upper()
 
 # ============================================================
@@ -887,6 +887,7 @@ def main(page: ft.Page):
     # ===== TELA DE ATIVAÇÃO =====
 
 
+    # ===== TELA DE ATIVAÇÃO (ELEMENTOS NA PARTE DE BAIXO) ===== 
     # ===== TELA DE ATIVAÇÃO (ELEMENTOS NA PARTE DE BAIXO) =====
     id_dispositivo = obter_id_dispositivo()
     senha_input = ft.TextField(label="Senha de ativação", password=True, width=280)
@@ -894,7 +895,14 @@ def main(page: ft.Page):
 
     def solicitar_ativacao(e):
         mensagem = f"Olá! Meu ID de ativação é: {id_dispositivo}. Por favor, me envie a senha."
-        webbrowser.open(f"https://wa.me/5528988049598?text={mensagem}")
+        url = f"https://wa.me/5528988049598?text={mensagem}"
+        try:
+            page.launch_url(url)
+            page.open(ft.SnackBar(content=ft.Text("✅ Abrindo WhatsApp...")))
+        except:
+            page.set_clipboard(id_dispositivo)
+            page.open(ft.SnackBar(content=ft.Text(f"⚠️ ID copiado: {id_dispositivo}. Envie no WhatsApp.")))
+        page.update()
 
     def verificar_senha(e):
         senha_correta = gerar_senha_por_id(id_dispositivo)
@@ -906,36 +914,36 @@ def main(page: ft.Page):
             page.update()
 
     tela_ativacao = ft.Container(
-        content=ft.Stack([
-        # Imagem de fundo
-            ft.Image(
-                src="assets/splash.png",
-               expand=True,
-               fit=ft.ImageFit.COVER,
-            ),
-        # Elementos na parte de baixo
+        expand=True,
+        image=ft.DecorationImage(
+            src="assets/splash.png",
+            fit=ft.ImageFit.COVER,
+        ),
+        content=ft.Column([
+            ft.Container(expand=True),  # Empurra tudo para baixo
             ft.Container(
                 content=ft.Column([
-                    ft.Container(height=40),  # Espaço no topo (opcional)
-                    ft.Container(
-                        content=ft.Text(
+                    ft.Row([
+                        ft.IconButton(
+                            icon=ft.Icons.COPY,
+                            tooltip="Copiar ID",
+                            on_click=lambda e: page.set_clipboard(id_dispositivo),
+                        ),
+                        ft.Text(
                             f"🔑 ID: {id_dispositivo}",
                             size=14,
                             color="white",
                         ),
-                        bgcolor="#00000088",
-                        padding=8,
-                        border_radius=10,
-                    ),
-                    ft.Container(height=1),
+                    ], alignment=ft.MainAxisAlignment.CENTER),
+                    ft.Container(height=0),
                     ft.ElevatedButton(
-                        "📱 Solicitar Ativação (WhatsApp)",
+                        "📱 Abrir WhatsApp (ou copiar ID)",
                         on_click=solicitar_ativacao,
                         bgcolor="#25d366",
                         color="white",
                         width=280,
                     ),
-                    ft.Container(height=1),
+                    ft.Container(height=0),
                     ft.Text("Digite a senha recebida:", size=14, color="white"),
                     senha_input,
                     msg_erro,
@@ -946,16 +954,11 @@ def main(page: ft.Page):
                         color="white",
                         width=280,
                     ),
-                    ft.Container(height=30),  # Espaço na parte de baixo (ajuste aqui)
-                ], 
-                    alignment=ft.MainAxisAlignment.END,
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
-                ),
+                    ft.Container(height=10),  # Espaço no rodapé
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 alignment=ft.alignment.bottom_center,
-                expand=True,
             ),
-    ]),
-        expand=True
+        ]),
     )
 
     page.add(tela_ativacao)
