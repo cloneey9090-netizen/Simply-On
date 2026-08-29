@@ -885,13 +885,16 @@ def main(page: ft.Page):
     page.window.height = 720
 
     # ===== TELA DE ATIVAÇÃO =====
+
+
+    # ===== TELA DE ATIVAÇÃO (ELEMENTOS NA PARTE DE BAIXO) =====
     id_dispositivo = obter_id_dispositivo()
-    senha_input = ft.TextField(label="Senha de ativação", password=True, width=300)
+    senha_input = ft.TextField(label="Senha de ativação", password=True, width=280)
     msg_erro = ft.Text("", color="red", size=14)
 
     def solicitar_ativacao(e):
         mensagem = f"Olá! Meu ID de ativação é: {id_dispositivo}. Por favor, me envie a senha."
-        webbrowser.open(f"https://wa.me/55SEUNUMERO?text={mensagem}")  # ← Coloque seu número com DDD
+        webbrowser.open(f"https://wa.me/5528988049598?text={mensagem}")
 
     def verificar_senha(e):
         senha_correta = gerar_senha_por_id(id_dispositivo)
@@ -902,35 +905,56 @@ def main(page: ft.Page):
             msg_erro.value = "❌ Senha incorreta! Tente novamente."
             page.update()
 
-    # Splash em tela cheia (com a imagem expandida)
     tela_ativacao = ft.Container(
-        content=ft.Column([
-            # Imagem em tela cheia (expandida e cobrindo a tela)
+        content=ft.Stack([
+        # Imagem de fundo
             ft.Image(
                 src="assets/splash.png",
-                expand=True,
-                fit=ft.ImageFit.COVER,  # Cobrir a tela inteira
+               expand=True,
+               fit=ft.ImageFit.COVER,
             ),
-            # Textos sobrepostos (centralizados)
+        # Elementos na parte de baixo
             ft.Container(
                 content=ft.Column([
-                    ft.Text("SimplyON", size=40, weight=ft.FontWeight.BOLD, color="#ff5722"),
-                    ft.Text("Seu negócio no ar,\nsimplesmente online", size=18, color="white", text_align=ft.TextAlign.CENTER),
-                    ft.Divider(height=20, color="transparent"),
-                    ft.Text(f"ID: {id_dispositivo}", size=14, color="#4caf50"),
-                    ft.ElevatedButton("📱 Solicitar Ativação (WhatsApp)", on_click=solicitar_ativacao),
-                    ft.Divider(height=10, color="transparent"),
-                    ft.Text("Digite a senha recebida:", size=14, color="#888"),
+                    ft.Container(height=40),  # Espaço no topo (opcional)
+                    ft.Container(
+                        content=ft.Text(
+                            f"🔑 ID: {id_dispositivo}",
+                            size=14,
+                            color="white",
+                        ),
+                        bgcolor="#00000088",
+                        padding=8,
+                        border_radius=10,
+                    ),
+                    ft.Container(height=1),
+                    ft.ElevatedButton(
+                        "📱 Solicitar Ativação (WhatsApp)",
+                        on_click=solicitar_ativacao,
+                        bgcolor="#25d366",
+                        color="white",
+                        width=280,
+                    ),
+                    ft.Container(height=1),
+                    ft.Text("Digite a senha recebida:", size=14, color="white"),
                     senha_input,
                     msg_erro,
-                    ft.ElevatedButton("🔓 Ativar", on_click=verificar_senha),
-                ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.alignment.center,
+                    ft.ElevatedButton(
+                        "🔓 Ativar",
+                        on_click=verificar_senha,
+                        bgcolor="#ff5722",
+                        color="white",
+                        width=280,
+                    ),
+                    ft.Container(height=30),  # Espaço na parte de baixo (ajuste aqui)
+                ], 
+                    alignment=ft.MainAxisAlignment.END,
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                ),
+                alignment=ft.alignment.bottom_center,
                 expand=True,
             ),
-        ], alignment=ft.MainAxisAlignment.CENTER),
-        alignment=ft.alignment.center,
-        bgcolor="#1a1a1a",
+    ]),
         expand=True
     )
 
@@ -1972,6 +1996,6 @@ def main(page: ft.Page):
         page.add(painel_conteudo)
 
     # O app principal só é carregado se a senha for correta (já chamado dentro de verificar_senha)
-
-if __name__ == "__main__":
+if __name__ == "__main__":    
     ft.app(target=main)
+
