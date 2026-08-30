@@ -43,6 +43,13 @@ jobs:
           channel: 'stable'
           cache: false
 
+      - name: Limpar cache do Flutter
+        run: |
+          flutter clean
+          rm -rf build/
+          rm -rf .dart_tool/
+          rm -rf ~/.pub-cache
+
       - name: Gerar APK com Flet
         run: |
           flet build apk --module-name painel
