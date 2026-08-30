@@ -37,7 +37,7 @@ jobs:
 
       - name: Gerar APK com Flet
         run: |
-          flet build apk --module-name painel
+          flet build apk --module-name painel --product-name "SimplyON"
 
       - name: Limpar cache e builds antigos (após o build)
         if: always()
