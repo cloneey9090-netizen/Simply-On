@@ -25,8 +25,8 @@ jobs:
       - name: Verificar pyproject.toml (debug)
         run: |
           echo "=== CONTEÚDO DO pyproject.toml ==="
-          cat pyproject.toml || echo "⚠️ Arquivo pyproject.toml não encontrado!"
-          echo "=== VERIFICANDO PASTA ASSETS ==="
+          cat pyproject.toml || echo "⚠️ Arquivo não encontrado!"
+          echo "=== ARQUIVOS NA PASTA ASSETS ==="
           ls -la assets/ || echo "⚠️ Pasta assets não encontrada!"
           echo "=== FIM ==="
 
@@ -43,9 +43,9 @@ jobs:
           channel: 'stable'
           cache: false
 
-      - name: Gerar APK com Flet (forçando nome e ícone)
+      - name: Gerar APK com Flet
         run: |
-          flet build apk --module-name painel --app-name "SimplyON" --icon assets/icone.png
+          flet build apk --module-name painel
 
       - name: Limpar cache e builds antigos (após o build)
         if: always()
