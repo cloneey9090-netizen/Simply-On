@@ -43,22 +43,9 @@ jobs:
           channel: 'stable'
           cache: false
 
-      - name: Limpar cache do Flutter
-        run: |
-          flutter clean
-          rm -rf build/
-          rm -rf .dart_tool/
-          rm -rf ~/.pub-cache
-
       - name: Gerar APK com Flet
         run: |
           flet build apk --module-name painel
-
-      - name: Limpar cache e builds antigos (após o build)
-        if: always()
-        run: |
-          rm -rf ~/.pub-cache
-          rm -rf ~/.flutter
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
