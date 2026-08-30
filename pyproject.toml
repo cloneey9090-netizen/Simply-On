@@ -1,9 +1,12 @@
 [tool.flet]
-project_name = "SimplyON"
-product_name = "SimplyON"  # Algumas versões do template usam product_name
-package_name = "com.simplyon.app"
-description = "Seu negócio no ar"
+product_name = "SimplyON"
+app_name = "SimplyON"
+description = "Crie seu site em 5 minutos"
 version = "1.0.0"
+
+[tool.flet.app]
+module_name = "painel"
 
 [tool.flet.android]
 icon = "assets/icone.png"
+package_name = "com.simplyon.app"
