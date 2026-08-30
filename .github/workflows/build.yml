@@ -43,6 +43,37 @@ jobs:
           channel: 'stable'
           cache: false
 
+      - name: Criar pubspec.yaml e configurar ícone manualmente
+        run: |
+          # Cria o pubspec.yaml
+          cat > pubspec.yaml << EOF
+          name: simplyon
+          description: Crie seu site em 5 minutos
+          version: 1.0.0
+          environment:
+            sdk: ">=3.0.0 <4.0.0"
+          flutter:
+            uses-material-design: true
+            assets:
+              - assets/
+          EOF
+          
+          # Cria a estrutura de ícones do Android
+          mkdir -p android/app/src/main/res/mipmap-hdpi
+          mkdir -p android/app/src/main/res/mipmap-mdpi
+          mkdir -p android/app/src/main/res/mipmap-xhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+          
+          # Copia o ícone para todas as resoluções
+          cp assets/icone.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          cp assets/icone.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          cp assets/icone.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          cp assets/icone.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          cp assets/icone.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          
+          echo "✅ Ícone copiado para todas as resoluções!"
+
       - name: Gerar APK com Flet
         run: |
           flet build apk --module-name painel
