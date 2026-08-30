@@ -35,9 +35,13 @@ jobs:
           channel: 'stable'
           cache: false
 
+      - name: Aceitar licenças do Android SDK
+        run: |
+          yes | flutter doctor --android-licenses || true
+
       - name: Gerar APK com Flet
         run: |
-          flet build apk
+          flet build apk --module-name painel
 
       - name: Limpar cache e builds antigos (após o build)
         if: always()
