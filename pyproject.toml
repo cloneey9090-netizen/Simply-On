@@ -1,7 +1,8 @@
 [tool.flet]
 project_name = "SimplyON"
-package_name = "com.simplyon.app"   # ← FORÇA O NOME DO PACOTE
-description = "Crie seu site em 5 minutos"
+product_name = "SimplyON"  # Algumas versões do template usam product_name
+package_name = "com.simplyon.app"
+description = "Seu negócio no ar"
 version = "1.0.0"
 
 [tool.flet.android]
