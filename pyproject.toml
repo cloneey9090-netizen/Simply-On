@@ -1,9 +1,8 @@
 [tool.flet]
-product_name = "SimplyON"
-app_name = "SimplyON"
+project_name = "SimplyON"
+package_name = "com.simplyon.app"   # <-- ADICIONE ESTA LINHA
 description = "Crie seu site em 5 minutos"
 version = "1.0.0"
 
 [tool.flet.android]
 icon = "assets/icone.png"
-package_name = "com.simplyon.app"
