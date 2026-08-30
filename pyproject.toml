@@ -1,6 +1,5 @@
 [tool.flet]
 project_name = "SimplyON"
-package_name = "com.simplyon.app"   # <-- ADICIONE ESTA LINHA
 description = "Crie seu site em 5 minutos"
 version = "1.0.0"
 
