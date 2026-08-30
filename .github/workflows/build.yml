@@ -22,6 +22,14 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Verificar pyproject.toml (debug)
+        run: |
+          echo "=== CONTEÚDO DO pyproject.toml ==="
+          cat pyproject.toml || echo "⚠️ Arquivo pyproject.toml não encontrado!"
+          echo "=== VERIFICANDO PASTA ASSETS ==="
+          ls -la assets/ || echo "⚠️ Pasta assets não encontrada!"
+          echo "=== FIM ==="
+
       - name: Baixar e embutir cloudflared para assets do Android
         run: |
           mkdir -p assets/bin
@@ -35,9 +43,9 @@ jobs:
           channel: 'stable'
           cache: false
 
-      - name: Gerar APK com Flet
+      - name: Gerar APK com Flet (forçando nome e ícone)
         run: |
-          flet build apk --module-name painel
+          flet build apk --module-name painel --app-name "SimplyON" --icon assets/icone.png
 
       - name: Limpar cache e builds antigos (após o build)
         if: always()
