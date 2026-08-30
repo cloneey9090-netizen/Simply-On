@@ -33,17 +33,17 @@ jobs:
         with:
           flutter-version: '3.24.0'
           channel: 'stable'
-          cache: false   # <-- CACHE DESATIVADO
-
-      - name: Limpar cache e builds antigos
-        run: |
-          flutter clean
-          rm -rf build/
-          rm -rf .dart_tool/
+          cache: false
 
       - name: Gerar APK com Flet
         run: |
           flet build apk --module-name painel
+
+      - name: Limpar cache e builds antigos (após o build)
+        if: always()
+        run: |
+          rm -rf ~/.pub-cache
+          rm -rf ~/.flutter
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
