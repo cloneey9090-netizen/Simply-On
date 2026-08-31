@@ -920,7 +920,7 @@ def main(page: ft.Page):
             fit=ft.ImageFit.COVER,
         ),
         content=ft.Column([
-            ft.Container(expand=True),  # Empurra tudo para baixo
+            ft.Container(expand=True),
             ft.Container(
                 content=ft.Column([
                     ft.Row([
@@ -935,7 +935,7 @@ def main(page: ft.Page):
                             color="white",
                         ),
                     ], alignment=ft.MainAxisAlignment.CENTER),
-                    ft.Container(height=0),
+                    ft.Container(height=10),
                     ft.ElevatedButton(
                         "📱 Abrir WhatsApp (ou copiar ID)",
                         on_click=solicitar_ativacao,
@@ -943,7 +943,7 @@ def main(page: ft.Page):
                         color="white",
                         width=280,
                     ),
-                    ft.Container(height=0),
+                    ft.Container(height=15),
                     ft.Text("Digite a senha recebida:", size=14, color="white"),
                     senha_input,
                     msg_erro,
@@ -954,7 +954,7 @@ def main(page: ft.Page):
                         color="white",
                         width=280,
                     ),
-                    ft.Container(height=10),  # Espaço no rodapé
+                    ft.Container(height=30),
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 alignment=ft.alignment.bottom_center,
             ),
