@@ -77,7 +77,18 @@ def obter_ip_local():
 # ===== FUNÇÕES DE ATIVAÇÃO POR DISPOSITIVO ==================
 # ============================================================
 def obter_id_dispositivo():
-    """Pega um ID único do dispositivo (Android ou PC)"""
+    if 'ANDROID_ROOT' in os.environ:
+        # Usa /data/data/com.flet.gerador_robo/cache
+        pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'cache')
+        id_arquivo = os.path.join(pasta, ".device_id")
+    else:
+        id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
+
+    if os.path.exists(id_arquivo):
+        with open(id_arquivo, "r") as f:
+            return f.read().strip()
+    
+    # Gera novo ID
     try:
         if 'ANDROID_ROOT' in os.environ:
             resultado = subprocess.run(
@@ -86,18 +97,20 @@ def obter_id_dispositivo():
                 text=True
             )
             if resultado.stdout:
-                return resultado.stdout.strip()
-        return str(uuid.getnode())
-    except:
-        id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
-        if os.path.exists(id_arquivo):
-            with open(id_arquivo, "r") as f:
-                return f.read().strip()
+                novo_id = resultado.stdout.strip()
+            else:
+                novo_id = str(uuid.uuid4())
         else:
             novo_id = str(uuid.uuid4())
-            with open(id_arquivo, "w") as f:
-                f.write(novo_id)
-            return novo_id
+    except:
+        novo_id = str(uuid.uuid4())
+
+    # Cria a pasta se não existir
+    os.makedirs(os.path.dirname(id_arquivo), exist_ok=True)
+    with open(id_arquivo, "w") as f:
+        f.write(novo_id)
+
+    return novo_id
 
 def gerar_senha_por_id(id_dispositivo):
     """Gera uma senha de 8 caracteres baseada no ID + segredo"""
@@ -935,7 +948,7 @@ def main(page: ft.Page):
                             color="white",
                         ),
                     ], alignment=ft.MainAxisAlignment.CENTER),
-                    ft.Container(height=10),
+                    ft.Container(height=1),
                     ft.ElevatedButton(
                         "📱 Abrir WhatsApp (ou copiar ID)",
                         on_click=solicitar_ativacao,
@@ -943,7 +956,7 @@ def main(page: ft.Page):
                         color="white",
                         width=280,
                     ),
-                    ft.Container(height=15),
+                    ft.Container(height=1),
                     ft.Text("Digite a senha recebida:", size=14, color="white"),
                     senha_input,
                     msg_erro,
@@ -954,7 +967,7 @@ def main(page: ft.Page):
                         color="white",
                         width=280,
                     ),
-                    ft.Container(height=30),
+                    ft.Container(height=10),
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 alignment=ft.alignment.bottom_center,
             ),
