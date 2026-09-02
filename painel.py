@@ -19,6 +19,7 @@ import tempfile
 import zipfile
 import uuid
 import hashlib
+from datetime import datetime, timedelta  # <-- ADICIONADO
 
 # ============================================================
 # ===== SEU ID DO ADSENSE (FIXO) =============================
@@ -35,6 +36,7 @@ ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
 ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
 PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
+ARQUIVO_ATIVACAO = os.path.join(PASTA_ATUAL, "ativacao.json")  # <-- ADICIONADO
 
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
@@ -78,7 +80,6 @@ def obter_ip_local():
 # ============================================================
 def obter_id_dispositivo():
     if 'ANDROID_ROOT' in os.environ:
-        # Usa /data/data/com.flet.gerador_robo/cache
         pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'cache')
         id_arquivo = os.path.join(pasta, ".device_id")
     else:
@@ -88,7 +89,6 @@ def obter_id_dispositivo():
         with open(id_arquivo, "r") as f:
             return f.read().strip()
     
-    # Gera novo ID
     try:
         if 'ANDROID_ROOT' in os.environ:
             resultado = subprocess.run(
@@ -105,7 +105,6 @@ def obter_id_dispositivo():
     except:
         novo_id = str(uuid.uuid4())
 
-    # Cria a pasta se não existir
     os.makedirs(os.path.dirname(id_arquivo), exist_ok=True)
     with open(id_arquivo, "w") as f:
         f.write(novo_id)
@@ -113,8 +112,7 @@ def obter_id_dispositivo():
     return novo_id
 
 def gerar_senha_por_id(id_dispositivo):
-    """Gera uma senha de 8 caracteres baseada no ID + segredo"""
-    SEGREDO = "VITRINE2025"  # Mude para uma palavra sua
+    SEGREDO = "VITRINE2025"
     return hashlib.sha256((id_dispositivo + SEGREDO).encode()).hexdigest()[:8].upper()
 
 # ============================================================
@@ -897,12 +895,30 @@ def main(page: ft.Page):
     page.window.width = 480
     page.window.height = 720
 
-    # ===== TELA DE ATIVAÇÃO =====
+    # ===== VERIFICAR SE JÁ ESTÁ ATIVADO E NÃO EXPIRou =====
+    dados_ativacao = carregar_json(ARQUIVO_ATIVACAO, {})
+    id_atual = obter_id_dispositivo()
+    
+    if dados_ativacao.get("id") == id_atual:
+        try:
+            data_ativacao = datetime.strptime(dados_ativacao["data_ativacao"], "%Y-%m-%d")
+            dias_passados = (datetime.now() - data_ativacao).days
+            
+            if dias_passados < 30:
+                # Ainda válido → carrega o app direto
+                carregar_app_principal(page)
+                return
+            else:
+                # Expirou → mostra mensagem e volta para ativação
+                page.open(ft.SnackBar(content=ft.Text("⚠️ Sua assinatura expirou! Peça uma nova senha.")))
+                # Limpa os dados de ativação para forçar nova ativação
+                salvar_json(ARQUIVO_ATIVACAO, {})
+        except:
+            # Se a data estiver corrompida, força nova ativação
+            salvar_json(ARQUIVO_ATIVACAO, {})
 
-
-    # ===== TELA DE ATIVAÇÃO (ELEMENTOS NA PARTE DE BAIXO) ===== 
     # ===== TELA DE ATIVAÇÃO (ELEMENTOS NA PARTE DE BAIXO) =====
-    id_dispositivo = obter_id_dispositivo()
+    id_dispositivo = id_atual
     senha_input = ft.TextField(label="Senha de ativação", password=True, width=280)
     msg_erro = ft.Text("", color="red", size=14)
 
@@ -920,6 +936,13 @@ def main(page: ft.Page):
     def verificar_senha(e):
         senha_correta = gerar_senha_por_id(id_dispositivo)
         if senha_input.value == senha_correta:
+            # ===== SALVAR DATA DE ATIVAÇÃO =====
+            dados = {
+                "id": id_dispositivo,
+                "data_ativacao": datetime.now().strftime("%Y-%m-%d")
+            }
+            salvar_json(ARQUIVO_ATIVACAO, dados)
+            # ===================================
             page.controls.clear()
             carregar_app_principal(page)
         else:
@@ -1006,21 +1029,15 @@ def main(page: ft.Page):
 
         estoque = carregar_json(ARQUIVO_JSON, [])
 
+        # ===== TODO O RESTO DO SEU CÓDIGO DO PAINEL AQUI =====
+        # (Mantido exatamente como você tinha)
         # ===== CAMPOS DO FORMULÁRIO =====
         txt_nome = ft.TextField(label="Nome da Peça")
         txt_modelo = ft.TextField(label="Modelo")
         txt_categoria = ft.TextField(label="Categoria")
         txt_preco = ft.TextField(label="Preço (Ex: R$ 150,00)")
         txt_desc = ft.TextField(label="Descrição")
-
-        txt_destaque = ft.Dropdown(
-            label="Produto Destaque?",
-            value="Não",
-            options=[
-                ft.dropdown.Option("Não"),
-                ft.dropdown.Option("Sim")
-            ]
-        )
+        txt_destaque = ft.Dropdown(label="Produto Destaque?", value="Não", options=[ft.dropdown.Option("Não"), ft.dropdown.Option("Sim")])
 
         # ===== CAMPOS DE IMAGEM DO PRODUTO =====
         caminho_imagem_selecionada = ""
@@ -1039,16 +1056,8 @@ def main(page: ft.Page):
         page.overlay.append(file_picker_imagem)
 
         def selecionar_imagem_click(e):
-            file_picker_imagem.pick_files(
-                allow_multiple=False,
-                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]
-            )
-
-        btn_selecionar_imagem = ft.ElevatedButton(
-            "📁 Selecionar Imagem",
-            on_click=selecionar_imagem_click,
-            icon=ft.Icons.FOLDER_OPEN
-        )
+            file_picker_imagem.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"])
+        btn_selecionar_imagem = ft.ElevatedButton("📁 Selecionar Imagem", on_click=selecionar_imagem_click, icon=ft.Icons.FOLDER_OPEN)
 
         # ===== LOGO =====
         caminho_logo_selecionada = ""
@@ -1066,16 +1075,8 @@ def main(page: ft.Page):
         page.overlay.append(file_picker_logo)
 
         def selecionar_logo_click(e):
-            file_picker_logo.pick_files(
-                allow_multiple=False,
-                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]
-            )
-
-        btn_selecionar_logo = ft.ElevatedButton(
-            "📁 Selecionar Logo",
-            on_click=selecionar_logo_click,
-            icon=ft.Icons.FOLDER_OPEN
-        )
+            file_picker_logo.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"])
+        btn_selecionar_logo = ft.ElevatedButton("📁 Selecionar Logo", on_click=selecionar_logo_click, icon=ft.Icons.FOLDER_OPEN)
 
         # ===== BANNERS =====
         caminho_banner1_selecionado = ""
@@ -1093,16 +1094,8 @@ def main(page: ft.Page):
         page.overlay.append(file_picker_banner1)
 
         def selecionar_banner1_click(e):
-            file_picker_banner1.pick_files(
-                allow_multiple=False,
-                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]
-            )
-
-        btn_selecionar_banner1 = ft.ElevatedButton(
-            "📁 Selecionar Banner 1",
-            on_click=selecionar_banner1_click,
-            icon=ft.Icons.FOLDER_OPEN
-        )
+            file_picker_banner1.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"])
+        btn_selecionar_banner1 = ft.ElevatedButton("📁 Selecionar Banner 1", on_click=selecionar_banner1_click, icon=ft.Icons.FOLDER_OPEN)
 
         caminho_banner2_selecionado = ""
         txt_banner2_nome = ft.Text("📷 Nenhum banner 2 selecionado", size=12, color="#888")
@@ -1119,16 +1112,8 @@ def main(page: ft.Page):
         page.overlay.append(file_picker_banner2)
 
         def selecionar_banner2_click(e):
-            file_picker_banner2.pick_files(
-                allow_multiple=False,
-                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]
-            )
-
-        btn_selecionar_banner2 = ft.ElevatedButton(
-            "📁 Selecionar Banner 2",
-            on_click=selecionar_banner2_click,
-            icon=ft.Icons.FOLDER_OPEN
-        )
+            file_picker_banner2.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"])
+        btn_selecionar_banner2 = ft.ElevatedButton("📁 Selecionar Banner 2", on_click=selecionar_banner2_click, icon=ft.Icons.FOLDER_OPEN)
 
         caminho_banner3_selecionado = ""
         txt_banner3_nome = ft.Text("📷 Nenhum banner 3 selecionado", size=12, color="#888")
@@ -1145,16 +1130,8 @@ def main(page: ft.Page):
         page.overlay.append(file_picker_banner3)
 
         def selecionar_banner3_click(e):
-            file_picker_banner3.pick_files(
-                allow_multiple=False,
-                allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"]
-            )
-
-        btn_selecionar_banner3 = ft.ElevatedButton(
-            "📁 Selecionar Banner 3",
-            on_click=selecionar_banner3_click,
-            icon=ft.Icons.FOLDER_OPEN
-        )
+            file_picker_banner3.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"])
+        btn_selecionar_banner3 = ft.ElevatedButton("📁 Selecionar Banner 3", on_click=selecionar_banner3_click, icon=ft.Icons.FOLDER_OPEN)
 
         lista_estoque = ft.Column()
 
@@ -1191,12 +1168,7 @@ def main(page: ft.Page):
             "🚗 Automóveis e Peças"
         ]
 
-        dropdown_nicho = ft.Dropdown(
-            label="📌 Tipo de Comércio",
-            value=config.get("nicho", "🏍️ Peças de Moto Usada"),
-            options=[ft.dropdown.Option(opcao) for opcao in nicho_opcoes],
-            on_change=lambda e: aplicar_nicho(e.control.value)
-        )
+        dropdown_nicho = ft.Dropdown(label="📌 Tipo de Comércio", value=config.get("nicho", "🏍️ Peças de Moto Usada"), options=[ft.dropdown.Option(opcao) for opcao in nicho_opcoes], on_change=lambda e: aplicar_nicho(e.control.value))
 
         def aplicar_nicho(nicho_escolhido):
             config_nicho = obter_config_nicho(nicho_escolhido)
@@ -1211,17 +1183,7 @@ def main(page: ft.Page):
             lista_estoque.controls.clear()
             for item in estoque:
                 destaque_texto = " ⭐" if item.get("destaque", False) else ""
-                lista_estoque.controls.append(
-                    ft.ListTile(
-                        title=ft.Text(f"{item['nome']}{destaque_texto}", weight=ft.FontWeight.BOLD),
-                        subtitle=ft.Text(f"{item['modelo']} - {item['preco']}"),
-                        trailing=ft.IconButton(
-                            icon=ft.Icons.DELETE,
-                            icon_color="red",
-                            on_click=lambda e, id_item=item["id"]: remover_peca(id_item)
-                        )
-                    )
-                )
+                lista_estoque.controls.append(ft.ListTile(title=ft.Text(f"{item['nome']}{destaque_texto}", weight=ft.FontWeight.BOLD), subtitle=ft.Text(f"{item['modelo']} - {item['preco']}"), trailing=ft.IconButton(icon=ft.Icons.DELETE, icon_color="red", on_click=lambda e, id_item=item["id"]: remover_peca(id_item))))
 
         def remover_peca(id_peca):
             nonlocal estoque
@@ -1244,9 +1206,7 @@ def main(page: ft.Page):
                 "descricao": txt_desc.value,
                 "destaque": txt_destaque.value == "Sim"
             }
-
             imagem_final = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc"
-
             if caminho_imagem_selecionada and os.path.exists(caminho_imagem_selecionada):
                 try:
                     if not os.path.exists(PASTA_IMAGENS):
@@ -1261,20 +1221,11 @@ def main(page: ft.Page):
                 except Exception as ex:
                     print(f"Erro ao copiar imagem: {ex}")
                     imagem_final = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc"
-
             item_novo["imagem"] = imagem_final
             estoque.append(item_novo)
             salvar_json(ARQUIVO_JSON, estoque)
             gerar_arquivo_site(config)
-
-            txt_nome.value = ""
-            txt_modelo.value = ""
-            txt_categoria.value = ""
-            txt_preco.value = ""
-            txt_desc.value = ""
-            txt_destaque.value = "Não"
-            txt_imagem_nome.value = "📷 Nenhuma imagem selecionada"
-
+            txt_nome.value = ""; txt_modelo.value = ""; txt_categoria.value = ""; txt_preco.value = ""; txt_desc.value = ""; txt_destaque.value = "Não"; txt_imagem_nome.value = "📷 Nenhuma imagem selecionada"
             atualizar_lista()
             page.open(ft.SnackBar(content=ft.Text("Item cadastrado e site atualizado com sucesso!")))
             page.update()
@@ -1289,31 +1240,25 @@ def main(page: ft.Page):
                     df = pd.read_csv(caminho_arquivo, sep=';', encoding='utf-8-sig')
                 else:
                     df = pd.read_excel(caminho_arquivo, engine='openpyxl')
-
                 col_nome = next((c for c in df.columns if c in ['nome', 'produto', 'titulo', 'item']), None)
                 col_modelo = next((c for c in df.columns if c in ['modelo', 'versao', 'codigo']), None)
                 col_categoria = next((c for c in df.columns if c in ['categoria', 'grupo', 'setor']), None)
                 col_preco = next((c for c in df.columns if c in ['preço', 'preco', 'valor', 'venda']), None)
                 col_desc = next((c for c in df.columns if c in ['descrição', 'descricao', 'detalhes']), None)
                 col_imagem = next((c for c in df.columns if c in ['imagem', 'foto', 'img', 'link']), None)
-
                 if not col_nome or not col_preco:
                     page.open(ft.SnackBar(content=ft.Text("Erro: A planilha precisa ter colunas 'Nome' e 'Preço'.")))
                     page.update()
                     return
-
                 proximo_id = len(estoque) + 1 if not estoque else max(item["id"] for item in estoque) + 1
                 novos_itens = 0
-
                 for _, row in df.iterrows():
                     nome_val = str(row[col_nome]) if pd.notna(row[col_nome]) else ""
                     if not nome_val or nome_val.lower() == 'nan':
                         continue
-
                     imagem_url = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc"
                     if col_imagem and pd.notna(row[col_imagem]):
                         imagem_url = str(row[col_imagem])
-
                     item = {
                         "id": proximo_id,
                         "nome": nome_val,
@@ -1328,7 +1273,6 @@ def main(page: ft.Page):
                     estoque.append(item)
                     proximo_id += 1
                     novos_itens += 1
-
                 salvar_json(ARQUIVO_JSON, estoque)
                 gerar_arquivo_site(config)
                 atualizar_lista()
@@ -1342,12 +1286,7 @@ def main(page: ft.Page):
         # ===== FUNÇÕES DE HOSPEDAGEM (VIA API REST) =================
         # ============================================================
         def carregar_config_upload():
-            padrao = {
-                "servico": "Netlify",
-                "token": "",
-                "site_name": "",
-                "github_repo": ""
-            }
+            padrao = {"servico": "Netlify", "token": "", "site_name": "", "github_repo": ""}
             if not os.path.exists(ARQUIVO_UPLOAD_CONFIG):
                 with open(ARQUIVO_UPLOAD_CONFIG, "w", encoding="utf-8") as f:
                     json.dump(padrao, f, indent=2)
@@ -1356,12 +1295,7 @@ def main(page: ft.Page):
                 return json.load(f)
 
         def salvar_config_upload(token, site_name, servico, github_repo):
-            config = {
-                "servico": servico,
-                "token": token,
-                "site_name": site_name,
-                "github_repo": github_repo
-            }
+            config = {"servico": servico, "token": token, "site_name": site_name, "github_repo": github_repo}
             with open(ARQUIVO_UPLOAD_CONFIG, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2)
             return True
@@ -1369,11 +1303,7 @@ def main(page: ft.Page):
         def testar_conexao_netlify(token):
             try:
                 headers = {"Authorization": f"Bearer {token}"}
-                response = requests.get(
-                    "https://api.netlify.com/api/v1/sites",
-                    headers=headers,
-                    timeout=10
-                )
+                response = requests.get("https://api.netlify.com/api/v1/sites", headers=headers, timeout=10)
                 return response.status_code == 200
             except:
                 return False
@@ -1381,11 +1311,7 @@ def main(page: ft.Page):
         def testar_conexao_github(token):
             try:
                 headers = {"Authorization": f"token {token}"}
-                response = requests.get(
-                    "https://api.github.com/user",
-                    headers=headers,
-                    timeout=10
-                )
+                response = requests.get("https://api.github.com/user", headers=headers, timeout=10)
                 return response.status_code == 200
             except:
                 return False
@@ -1394,49 +1320,32 @@ def main(page: ft.Page):
             try:
                 if not token:
                     return None, "Token não configurado"
-
                 headers = {"Authorization": f"Bearer {token}"}
                 url_sites = "https://api.netlify.com/api/v1/sites"
-
-                # 1. Listar sites para ver se já existe
                 response = requests.get(url_sites, headers=headers)
                 if response.status_code != 200:
                     return None, f"Erro ao listar sites: {response.status_code}"
-
                 sites = response.json()
                 site_id = None
-
                 for site in sites:
                     if site.get("name") == site_name:
                         site_id = site["id"]
                         break
-
-                # 2. Se não encontrou, cria um novo site
                 if not site_id:
                     create_data = {"name": site_name}
                     response = requests.post(url_sites, headers=headers, json=create_data)
-
                     if response.status_code in [200, 201]:
                         site_id = response.json()["id"]
                     else:
                         return None, f"Erro ao criar site (Tente outro nome): {response.status_code} - {response.text}"
-
                 if not site_id:
                     return None, "Não foi possível obter o site_id."
-
-                # 3. Lê o index.html
                 index_path = os.path.join(pasta_do_site, "index.html")
                 if not os.path.exists(index_path):
                     return None, "Arquivo index.html não encontrado"
-
-                # 4. Compacta o index.html + pasta imagens/ em um arquivo ZIP
                 zip_path = os.path.join(pasta_do_site, "deploy.zip")
-
                 with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    # Adiciona o index.html na raiz
                     zipf.write(index_path, arcname="index.html")
-
-                    # Adiciona a pasta imagens/ se existir
                     imagens_path = os.path.join(pasta_do_site, "imagens")
                     if os.path.exists(imagens_path):
                         for root, dirs, files in os.walk(imagens_path):
@@ -1444,39 +1353,23 @@ def main(page: ft.Page):
                                 file_path = os.path.join(root, file)
                                 arcname = os.path.relpath(file_path, pasta_do_site)
                                 zipf.write(file_path, arcname=arcname)
-
-                # 5. Faz o deploy enviando o ZIP com o Content-Type correto
                 deploy_url = f"https://api.netlify.com/api/v1/sites/{site_id}/deploys"
-
                 with open(zip_path, "rb") as zip_file:
                     zip_data = zip_file.read()
-
-                headers_deploy = {
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/zip"
-                }
+                headers_deploy = {"Authorization": f"Bearer {token}", "Content-Type": "application/zip"}
                 response = requests.post(deploy_url, headers=headers_deploy, data=zip_data)
-
-                # Remove o zip temporário
                 if os.path.exists(zip_path):
                     os.remove(zip_path)
-
                 if response.status_code not in [200, 201, 202]:
                     return None, f"Erro no deploy: {response.status_code} - {response.text}"
-
-                # 6. Pega a URL oficial
                 deploy_data = response.json()
                 url = deploy_data.get("ssl_url") or deploy_data.get("url")
-
                 if not url:
                     site_info = requests.get(f"{url_sites}/{site_id}", headers=headers).json()
                     url = site_info.get("ssl_url") or site_info.get("url")
-
                 if not url:
                     return None, "Deploy feito, mas link não retornado."
-
                 return url, None
-
             except Exception as e:
                 return None, f"Erro ao hospedar: {str(e)}"
 
@@ -1487,27 +1380,15 @@ def main(page: ft.Page):
                 with open(ARQUIVO_HTML, "rb") as f:
                     conteudo = f.read()
                 conteudo_base64 = base64.b64encode(conteudo).decode('utf-8')
-                headers = {
-                    "Authorization": f"token {token}",
-                    "Accept": "application/vnd.github.v3+json"
-                }
+                headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
                 url_check = f"https://api.github.com/repos/{repo_nome}/contents/index.html"
                 response_check = requests.get(url_check, headers=headers)
                 if response_check.status_code == 200:
                     sha = response_check.json()["sha"]
-                    data = {
-                        "message": "Site atualizado automaticamente",
-                        "content": conteudo_base64,
-                        "sha": sha,
-                        "branch": "main"
-                    }
+                    data = {"message": "Site atualizado automaticamente", "content": conteudo_base64, "sha": sha, "branch": "main"}
                     response = requests.put(url_check, headers=headers, json=data)
                 else:
-                    data = {
-                        "message": "Site criado automaticamente",
-                        "content": conteudo_base64,
-                        "branch": "main"
-                    }
+                    data = {"message": "Site criado automaticamente", "content": conteudo_base64, "branch": "main"}
                     response = requests.put(url_check, headers=headers, json=data)
                 if response.status_code in [200, 201]:
                     url = f"https://{repo_nome.split('/')[0]}.github.io/{repo_nome.split('/')[1]}"
@@ -1535,51 +1416,13 @@ def main(page: ft.Page):
                 cor_atual_nome = nome
                 break
 
-        dropdown_cor = ft.Dropdown(
-            label="Cor Principal",
-            value=cor_atual_nome,
-            options=[ft.dropdown.Option(nome) for nome in cores_disponiveis.keys()]
-        )
+        dropdown_cor = ft.Dropdown(label="Cor Principal", value=cor_atual_nome, options=[ft.dropdown.Option(nome) for nome in cores_disponiveis.keys()])
+        dropdown_tema = ft.Dropdown(label="Tema do Site", value=config.get("tema_site", "Escuro"), options=[ft.dropdown.Option("Escuro"), ft.dropdown.Option("Claro")])
 
-        dropdown_tema = ft.Dropdown(
-            label="Tema do Site",
-            value=config.get("tema_site", "Escuro"),
-            options=[ft.dropdown.Option("Escuro"), ft.dropdown.Option("Claro")]
-        )
-
-        # ============================================================
-        # ===== PAINEL DE HOSPEDAGEM =================================
-        # ============================================================
-        txt_token = ft.TextField(
-            label="🔑 Token de Acesso",
-            hint_text="Cole aqui o token gerado no Netlify ou GitHub",
-            password=True,
-            width=400
-        )
-
-        txt_nome_site = ft.TextField(
-            label="📝 Nome do Site (Netlify)",
-            hint_text="Ex: vitrine",
-            width=400
-        )
-
-        txt_github_repo = ft.TextField(
-            label="📂 Repositório GitHub",
-            hint_text="Ex: usuario/repositorio",
-            width=400,
-            visible=False
-        )
-
-        dropdown_servico_hospedagem = ft.Dropdown(
-            label="🌐 Serviço de Hospedagem",
-            value="Netlify",
-            options=[
-                ft.dropdown.Option("Netlify"),
-                ft.dropdown.Option("GitHub"),
-            ],
-            width=400,
-            on_change=lambda e: mostrar_github(e.control.value)
-        )
+        txt_token = ft.TextField(label="🔑 Token de Acesso", hint_text="Cole aqui o token gerado no Netlify ou GitHub", password=True, width=400)
+        txt_nome_site = ft.TextField(label="📝 Nome do Site (Netlify)", hint_text="Ex: vitrine", width=400)
+        txt_github_repo = ft.TextField(label="📂 Repositório GitHub", hint_text="Ex: usuario/repositorio", width=400, visible=False)
+        dropdown_servico_hospedagem = ft.Dropdown(label="🌐 Serviço de Hospedagem", value="Netlify", options=[ft.dropdown.Option("Netlify"), ft.dropdown.Option("GitHub")], width=400, on_change=lambda e: mostrar_github(e.control.value))
 
         def mostrar_github(servico):
             if servico == "GitHub":
@@ -1590,22 +1433,16 @@ def main(page: ft.Page):
                 txt_nome_site.visible = True
             page.update()
 
-        txt_status_hospedagem = ft.Text(
-            "⚪ Aguardando configuração...",
-            size=12,
-            color="#888"
-        )
+        txt_status_hospedagem = ft.Text("⚪ Aguardando configuração...", size=12, color="#888")
 
         def testar_conexao_click(e):
             token = txt_token.value
             servico = dropdown_servico_hospedagem.value
-
             if not token:
                 txt_status_hospedagem.value = "❌ Por favor, cole seu token"
                 txt_status_hospedagem.color = "#ff5722"
                 page.update()
                 return
-
             if servico == "Netlify":
                 if testar_conexao_netlify(token):
                     txt_status_hospedagem.value = "✅ Conexão com Netlify funcionando!"
@@ -1627,19 +1464,16 @@ def main(page: ft.Page):
             site_name = txt_nome_site.value or "meu-site"
             servico = dropdown_servico_hospedagem.value
             github_repo = txt_github_repo.value or ""
-
             if not token:
                 txt_status_hospedagem.value = "❌ Token é obrigatório!"
                 txt_status_hospedagem.color = "#ff5722"
                 page.update()
                 return
-
             if servico == "GitHub" and not github_repo:
                 txt_status_hospedagem.value = "❌ Repositório GitHub é obrigatório!"
                 txt_status_hospedagem.color = "#ff5722"
                 page.update()
                 return
-
             salvar_config_upload(token, site_name, servico, github_repo)
             txt_status_hospedagem.value = f"✅ Configurações para {servico} salvas!"
             txt_status_hospedagem.color = "#4caf50"
@@ -1649,23 +1483,19 @@ def main(page: ft.Page):
             config_upload = carregar_config_upload()
             token = config_upload.get("token", "")
             servico = config_upload.get("servico", "Netlify")
-
             if not token:
                 txt_status_hospedagem.value = "❌ Token não configurado!"
                 txt_status_hospedagem.color = "#ff5722"
                 page.update()
                 return
-
             if not os.path.exists(ARQUIVO_HTML):
                 txt_status_hospedagem.value = "❌ Site não gerado!"
                 txt_status_hospedagem.color = "#ff5722"
                 page.update()
                 return
-
             txt_status_hospedagem.value = "⏳ Hospedando site... Aguarde..."
             txt_status_hospedagem.color = "#ff9800"
             page.update()
-
             if servico == "Netlify":
                 site_name = config_upload.get("site_name", "meu-site")
                 url, erro = hospedar_netlify(PASTA_ATUAL, token, site_name)
@@ -1677,7 +1507,6 @@ def main(page: ft.Page):
                     page.update()
                     return
                 url, erro = hospedar_github(PASTA_ATUAL, token, repo)
-
             if url:
                 txt_status_hospedagem.value = f"✅ Site hospedado: {url}"
                 txt_status_hospedagem.color = "#4caf50"
@@ -1698,22 +1527,13 @@ def main(page: ft.Page):
             txt_status_hospedagem.value = "✅ Configuração carregada!"
             txt_status_hospedagem.color = "#4caf50"
 
-        # ============================================================
-        # ===== LINK PÚBLICO (EXIBIÇÃO PERSISTENTE) ==================
-        # ============================================================
         link_text = ft.Text("Nenhum link gerado ainda", expand=True)
-
         link_exibicao = ft.Container(
             content=ft.Column([
                 ft.Text("🔗 Link Público:", weight=ft.FontWeight.BOLD, size=14),
                 ft.Row([
                     link_text,
-                    ft.IconButton(
-                        icon=ft.Icons.COPY,
-                        tooltip="Copiar link",
-                        on_click=lambda e: copiar_link(e),
-                        disabled=True
-                    ),
+                    ft.IconButton(icon=ft.Icons.COPY, tooltip="Copiar link", on_click=lambda e: copiar_link(e), disabled=True),
                 ]),
             ]),
             padding=10,
@@ -1736,19 +1556,13 @@ def main(page: ft.Page):
                 page.open(ft.SnackBar(content=ft.Text("✅ Link copiado!")))
                 page.update()
 
-        # ============================================================
-        # ===== BOTÃO ABRIR SITE LOCAL ===============================
-        # ============================================================
         def abrir_site_local_click(e):
             global link_publico, tunel_ativo
-
             if not os.path.exists(ARQUIVO_HTML):
                 page.open(ft.SnackBar(content=ft.Text("❌ Gere o site primeiro!")))
                 page.update()
                 return
-
             disparar_servidor_em_segundo_plano()
-
             if 'ANDROID_ROOT' in os.environ:
                 mensagem = abrir_pikotunnel(8550)
                 page.open(ft.SnackBar(content=ft.Text(mensagem)))
@@ -1765,25 +1579,14 @@ def main(page: ft.Page):
                     page.open(ft.SnackBar(content=ft.Text(mensagem)))
                 if tunel_ativo and link_publico:
                     mostrar_link(link_publico)
-
             webbrowser.open(f"http://{obter_endereco_servidor()}:8550")
             page.update()
 
-        btn_abrir_site_local = ft.ElevatedButton(
-            "📤 Compartilhar Meu Catálogo",
-            on_click=abrir_site_local_click,
-            icon=ft.Icons.SHARE,
-            width=200,
-        )
+        btn_abrir_site_local = ft.ElevatedButton("📤 Compartilhar Meu Catálogo", on_click=abrir_site_local_click, icon=ft.Icons.SHARE, width=200)
 
-        # ============================================================
-        # ===== SALVAR CONFIGURAÇÕES =================================
-        # ============================================================
         def salvar_config(e):
             nonlocal config, caminho_logo_selecionada, caminho_banner1_selecionado, caminho_banner2_selecionado, caminho_banner3_selecionado
-
             cor_selecionada = dropdown_cor.value
-
             logo_final = config.get("logo_url", "")
             if caminho_logo_selecionada and os.path.exists(caminho_logo_selecionada):
                 try:
@@ -1797,9 +1600,7 @@ def main(page: ft.Page):
                     txt_logo_nome.value = "📷 Nenhuma logo selecionada"
                 except Exception as ex:
                     print(f"Erro ao copiar logo: {ex}")
-
             banners = []
-
             banner1_final = ""
             if caminho_banner1_selecionado and os.path.exists(caminho_banner1_selecionado):
                 try:
@@ -1813,7 +1614,6 @@ def main(page: ft.Page):
                     print(f"Erro ao copiar banner 1: {ex}")
             else:
                 banner1_final = config.get("banners", [{"url": ""}])[0].get("url", "") if config.get("banners") else ""
-
             banner2_final = ""
             if caminho_banner2_selecionado and os.path.exists(caminho_banner2_selecionado):
                 try:
@@ -1827,7 +1627,6 @@ def main(page: ft.Page):
                     print(f"Erro ao copiar banner 2: {ex}")
             else:
                 banner2_final = config.get("banners", [{"url": ""}, {"url": ""}])[1].get("url", "") if len(config.get("banners", [])) > 1 else ""
-
             banner3_final = ""
             if caminho_banner3_selecionado and os.path.exists(caminho_banner3_selecionado):
                 try:
@@ -1841,13 +1640,7 @@ def main(page: ft.Page):
                     print(f"Erro ao copiar banner 3: {ex}")
             else:
                 banner3_final = config.get("banners", [{"url": ""}, {"url": ""}, {"url": ""}])[2].get("url", "") if len(config.get("banners", [])) > 2 else ""
-
-            frases = config.get("banners", [
-                {"frase": "QUALIDADE E PROCEDÊNCIA"},
-                {"frase": "AS MELHORES MARCAS PARA VOCÊ"},
-                {"frase": "ATENDIMENTO ESPECIALIZADO"}
-            ])
-
+            frases = config.get("banners", [{"frase": "QUALIDADE E PROCEDÊNCIA"}, {"frase": "AS MELHORES MARCAS PARA VOCÊ"}, {"frase": "ATENDIMENTO ESPECIALIZADO"}])
             banners = []
             if banner1_final:
                 banners.append({"url": banner1_final, "frase": frases[0].get("frase", "Banner 1") if len(frases) > 0 else "Banner 1"})
@@ -1855,15 +1648,9 @@ def main(page: ft.Page):
                 banners.append({"url": banner2_final, "frase": frases[1].get("frase", "Banner 2") if len(frases) > 1 else "Banner 2"})
             if banner3_final:
                 banners.append({"url": banner3_final, "frase": frases[2].get("frase", "Banner 3") if len(frases) > 2 else "Banner 3"})
-
             if not banners:
                 config_nicho = obter_config_nicho(dropdown_nicho.value)
-                banners = [
-                    {"url": "https://images.unsplash.com/photo-1558981403-c5f9899a28bc", "frase": config_nicho["banners"][0]},
-                    {"url": "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87", "frase": config_nicho["banners"][1]},
-                    {"url": "https://images.unsplash.com/photo-1609630875176-b800c92cf03d", "frase": config_nicho["banners"][2]}
-                ]
-
+                banners = [{"url": "https://images.unsplash.com/photo-1558981403-c5f9899a28bc", "frase": config_nicho["banners"][0]}, {"url": "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87", "frase": config_nicho["banners"][1]}, {"url": "https://images.unsplash.com/photo-1609630875176-b800c92cf03d", "frase": config_nicho["banners"][2]}]
             config = {
                 "nome_loja": txt_nome_loja.value,
                 "subtitulo": config.get("subtitulo", ""),
@@ -1876,15 +1663,11 @@ def main(page: ft.Page):
                 "tema_site": dropdown_tema.value,
                 "nicho": dropdown_nicho.value
             }
-
             salvar_json(ARQUIVO_CONFIG, config)
             gerar_arquivo_site(config)
             page.open(ft.SnackBar(content=ft.Text("✅ Configurações salvas e Site gerado!")))
             page.update()
 
-        # ============================================================
-        # ===== COLUNAS ==============================================
-        # ============================================================
         coluna_hospedagem = ft.Column([
             ft.Text("🌐 HOSPEDAGEM AUTOMÁTICA", weight=ft.FontWeight.BOLD, size=18),
             ft.Text("Configure seu token para hospedar sites com um clique", size=13, color="#888"),
@@ -1893,22 +1676,12 @@ def main(page: ft.Page):
             txt_token,
             txt_nome_site,
             txt_github_repo,
-            ft.Row([
-                ft.ElevatedButton("🔗 Testar Conexão", on_click=testar_conexao_click),
-                ft.ElevatedButton("💾 Salvar Configuração", on_click=salvar_config_upload_click),
-            ], wrap=True),
+            ft.Row([ft.ElevatedButton("🔗 Testar Conexão", on_click=testar_conexao_click), ft.ElevatedButton("💾 Salvar Configuração", on_click=salvar_config_upload_click)], wrap=True),
             ft.Divider(),
             ft.Text("🚀 Ações Rápidas", weight=ft.FontWeight.BOLD, size=14),
-            ft.Row([
-                ft.ElevatedButton("🌐 Hospedar Site Agora", on_click=hospedar_site_click, icon=ft.Icons.CLOUD_UPLOAD),
-            ], wrap=True),
+            ft.Row([ft.ElevatedButton("🌐 Hospedar Site Agora", on_click=hospedar_site_click, icon=ft.Icons.CLOUD_UPLOAD)], wrap=True),
             ft.Divider(),
-            ft.Container(
-                content=txt_status_hospedagem,
-                padding=10,
-                bgcolor="#1e1e1e",
-                border_radius=6,
-            ),
+            ft.Container(content=txt_status_hospedagem, padding=10, bgcolor="#1e1e1e", border_radius=6),
             ft.Text("📌 Como obter seu token:", weight=ft.FontWeight.BOLD, size=13),
             ft.Text("🔵 Netlify: app.netlify.com/user/applications/personal", size=11),
             ft.Text("🟢 GitHub: github.com/settings/tokens (marque 'repo')", size=11),
@@ -1916,9 +1689,6 @@ def main(page: ft.Page):
 
         atualizar_lista()
 
-        # ============================================================
-        # ===== ANÚNCIO ADMOB (BANNER) ===============================
-        # ============================================================
         banner_admob = ft.Container(
             content=ft.Row([
                 ft.Icon(ft.Icons.ADS_CLICK, size=20, color="#4caf50"),
@@ -1937,14 +1707,7 @@ def main(page: ft.Page):
             dropdown_nicho,
             ft.Divider(),
             ft.Text("📥 Importação de Estoque", weight=ft.FontWeight.BOLD, size=16),
-            ft.ElevatedButton(
-                text="Carregar Planilha (Excel / CSV)",
-                icon=ft.Icons.UPLOAD_FILE,
-                on_click=lambda _: file_picker.pick_files(
-                    allow_multiple=False,
-                    allowed_extensions=["xlsx", "xls", "csv"]
-                )
-            ),
+            ft.ElevatedButton(text="Carregar Planilha (Excel / CSV)", icon=ft.Icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files(allow_multiple=False, allowed_extensions=["xlsx", "xls", "csv"])),
             ft.Divider(),
             ft.Text("➕ Cadastrar Novo Item", weight=ft.FontWeight.BOLD, size=16),
             txt_nome, txt_modelo, txt_categoria, txt_preco, txt_desc,
@@ -1952,10 +1715,7 @@ def main(page: ft.Page):
             btn_selecionar_imagem,
             txt_imagem_nome,
             txt_destaque,
-            ft.Row([
-                ft.ElevatedButton(content=ft.Text("Salvar Item"), on_click=salvar_peca),
-                btn_abrir_site_local,
-            ], wrap=True),
+            ft.Row([ft.ElevatedButton(content=ft.Text("Salvar Item"), on_click=salvar_peca), btn_abrir_site_local], wrap=True),
             link_exibicao,
             banner_admob,
             ft.Divider(),
@@ -1972,15 +1732,9 @@ def main(page: ft.Page):
             txt_whatsapp, txt_instagram,
             ft.Divider(),
             ft.Text("🖼️ Banners do Carrossel", weight=ft.FontWeight.BOLD, size=14),
-            ft.Text("Banner 1", size=12),
-            btn_selecionar_banner1,
-            txt_banner1_nome,
-            ft.Text("Banner 2", size=12),
-            btn_selecionar_banner2,
-            txt_banner2_nome,
-            ft.Text("Banner 3", size=12),
-            btn_selecionar_banner3,
-            txt_banner3_nome,
+            ft.Text("Banner 1", size=12), btn_selecionar_banner1, txt_banner1_nome,
+            ft.Text("Banner 2", size=12), btn_selecionar_banner2, txt_banner2_nome,
+            ft.Text("Banner 3", size=12), btn_selecionar_banner3, txt_banner3_nome,
             ft.Divider(),
             dropdown_cor, dropdown_tema,
             ft.Container(height=10),
@@ -2011,7 +1765,6 @@ def main(page: ft.Page):
         page.scroll = ft.ScrollMode.AUTO
         page.add(painel_conteudo)
 
-    # O app principal só é carregado se a senha for correta (já chamado dentro de verificar_senha)
-if __name__ == "__main__":    
+if __name__ == "__main__":
     ft.app(target=main)
 
