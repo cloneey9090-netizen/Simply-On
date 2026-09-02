@@ -19,12 +19,12 @@ import tempfile
 import zipfile
 import uuid
 import hashlib
-from datetime import datetime, timedelta  # <-- ADICIONADO
+from datetime import datetime, timedelta  # <-- IMPORTANTE
 
 # ============================================================
 # ===== SEU ID DO ADSENSE (FIXO) =============================
 # ============================================================
-MEU_ADSENSE_ID = "pub-1234567890123456"  # SUBSTITUA PELO SEU ID REAL
+MEU_ADSENSE_ID = "pub-1234567890123456"
 
 # ============================================================
 # ===== CONFIGURAÇÕES DE PASTAS ==============================
@@ -36,7 +36,22 @@ ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
 ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
 PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
-ARQUIVO_ATIVACAO = os.path.join(PASTA_ATUAL, "ativacao.json")  # <-- ADICIONADO
+
+# ===== LOCAL PERSISTENTE PARA ATIVAÇÃO (IGUAL AO device_id) =====
+if 'ANDROID_ROOT' in os.environ:
+    # No Android: /data/data/com.flet.gerador_robo/files/ativacao.json
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    pasta_persistente = os.path.join(base_dir, '..', '..', '..', '..', 'files')
+    ARQUIVO_ATIVACAO = os.path.join(pasta_persistente, "ativacao.json")
+else:
+    # No PC: raiz do projeto
+    ARQUIVO_ATIVACAO = os.path.join(PASTA_ATUAL, "ativacao.json")
+
+# Cria a pasta persistente se não existir (no Android)
+if 'ANDROID_ROOT' in os.environ:
+    pasta_persistente = os.path.dirname(ARQUIVO_ATIVACAO)
+    if not os.path.exists(pasta_persistente):
+        os.makedirs(pasta_persistente)
 
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
@@ -53,6 +68,10 @@ def carregar_json(arquivo, padrao):
             return padrao
 
 def salvar_json(arquivo, dados):
+    # Cria a pasta se não existir
+    pasta = os.path.dirname(arquivo)
+    if pasta and not os.path.exists(pasta):
+        os.makedirs(pasta)
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
@@ -80,7 +99,7 @@ def obter_ip_local():
 # ============================================================
 def obter_id_dispositivo():
     if 'ANDROID_ROOT' in os.environ:
-        pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'cache')
+        pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '..', 'cache')
         id_arquivo = os.path.join(pasta, ".device_id")
     else:
         id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
@@ -917,7 +936,7 @@ def main(page: ft.Page):
             # Se a data estiver corrompida, força nova ativação
             salvar_json(ARQUIVO_ATIVACAO, {})
 
-    # ===== TELA DE ATIVAÇÃO (ELEMENTOS NA PARTE DE BAIXO) =====
+    # ===== TELA DE ATIVAÇÃO =====
     id_dispositivo = id_atual
     senha_input = ft.TextField(label="Senha de ativação", password=True, width=280)
     msg_erro = ft.Text("", color="red", size=14)
@@ -1029,8 +1048,6 @@ def main(page: ft.Page):
 
         estoque = carregar_json(ARQUIVO_JSON, [])
 
-        # ===== TODO O RESTO DO SEU CÓDIGO DO PAINEL AQUI =====
-        # (Mantido exatamente como você tinha)
         # ===== CAMPOS DO FORMULÁRIO =====
         txt_nome = ft.TextField(label="Nome da Peça")
         txt_modelo = ft.TextField(label="Modelo")
@@ -1283,7 +1300,7 @@ def main(page: ft.Page):
                 page.update()
 
         # ============================================================
-        # ===== FUNÇÕES DE HOSPEDAGEM (VIA API REST) =================
+        # ===== FUNÇÕES DE HOSPEDAGEM =================================
         # ============================================================
         def carregar_config_upload():
             padrao = {"servico": "Netlify", "token": "", "site_name": "", "github_repo": ""}
