@@ -38,14 +38,13 @@ PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
 PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
 
 # ===== LOCAL PERSISTENTE PARA ATIVAÇÃO (IGUAL AO device_id) =====
+# ===== LOCAL PERSISTENTE PARA ATIVAÇÃO =====
 if 'ANDROID_ROOT' in os.environ:
-    # No Android: /data/user/0/com.flet.simply_on/files/ativacao.json
+    # Android: /data/user/0/com.flet.simply_on/files/ativacao.json
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    # sobe dois níveis: app -> flet -> files (diretório de dados do app)
-    pasta_persistente = os.path.join(base_dir, '..', '..')
+    pasta_persistente = os.path.join(base_dir, '..', '..', '..', 'files')
     ARQUIVO_ATIVACAO = os.path.join(pasta_persistente, "ativacao.json")
 else:
-    # No PC: raiz do projeto
     ARQUIVO_ATIVACAO = os.path.join(PASTA_ATUAL, "ativacao.json")
 
 # Cria a pasta persistente se não existir (no Android)
@@ -99,7 +98,8 @@ def obter_ip_local():
 # ============================================================
 def obter_id_dispositivo():
     if 'ANDROID_ROOT' in os.environ:
-        pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '..', 'cache')
+        # Android: /data/user/0/com.flet.simply_on/cache/.device_id
+        pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
         id_arquivo = os.path.join(pasta, ".device_id")
     else:
         id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
