@@ -39,9 +39,10 @@ PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
 
 # ===== LOCAL PERSISTENTE PARA ATIVAÇÃO (IGUAL AO device_id) =====
 if 'ANDROID_ROOT' in os.environ:
-    # No Android: /data/data/com.flet.gerador_robo/files/ativacao.json
+    # No Android: /data/user/0/com.flet.simply_on/files/ativacao.json
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    pasta_persistente = os.path.join(base_dir, '..', '..', '..', '..', 'files')
+    # sobe dois níveis: app -> flet -> files (diretório de dados do app)
+    pasta_persistente = os.path.join(base_dir, '..', '..')
     ARQUIVO_ATIVACAO = os.path.join(pasta_persistente, "ativacao.json")
 else:
     # No PC: raiz do projeto
@@ -49,9 +50,8 @@ else:
 
 # Cria a pasta persistente se não existir (no Android)
 if 'ANDROID_ROOT' in os.environ:
-    pasta_persistente = os.path.dirname(ARQUIVO_ATIVACAO)
-    if not os.path.exists(pasta_persistente):
-        os.makedirs(pasta_persistente)
+    # A pasta já existe, não precisa criar
+    pass
 
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
