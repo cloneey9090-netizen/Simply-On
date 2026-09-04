@@ -915,25 +915,41 @@ def main(page: ft.Page):
     page.window.height = 720
 
     # ===== VERIFICAR SE JÁ ESTÁ ATIVADO E NÃO EXPIRou =====
+    # ===== VERIFICAR SE JÁ ESTÁ ATIVADO E NÃO EXPIRou =====
     dados_ativacao = carregar_json(ARQUIVO_ATIVACAO, {})
     id_atual = obter_id_dispositivo()
-    
+
     if dados_ativacao.get("id") == id_atual:
         try:
             data_ativacao = datetime.strptime(dados_ativacao["data_ativacao"], "%Y-%m-%d")
             dias_passados = (datetime.now() - data_ativacao).days
-            
+        
             if dias_passados < 30:
-                # Ainda válido → carrega o app direto
+            # Ainda válido → carrega o app direto
                 carregar_app_principal(page)
                 return
             else:
-                # Expirou → mostra mensagem e volta para ativação
-                page.open(ft.SnackBar(content=ft.Text("⚠️ Sua assinatura expirou! Peça uma nova senha.")))
-                # Limpa os dados de ativação para forçar nova ativação
+            # ===== APAGA O .device_id PARA FORÇAR NOVO ID =====
+                if 'ANDROID_ROOT' in os.environ:
+                    pasta_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
+                    id_arquivo = os.path.join(pasta_cache, ".device_id")
+                else:
+                    id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
+                if os.path.exists(id_arquivo):
+                    os.remove(id_arquivo)
+            
+            # Limpa a ativação
                 salvar_json(ARQUIVO_ATIVACAO, {})
+                page.open(ft.SnackBar(content=ft.Text("⚠️ Sua assinatura expirou! O ID foi renovado. Solicite uma nova senha.")))
         except:
-            # Se a data estiver corrompida, força nova ativação
+        # Em caso de erro, força renovação
+            if 'ANDROID_ROOT' in os.environ:
+                pasta_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
+                id_arquivo = os.path.join(pasta_cache, ".device_id")
+            else:
+                id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
+            if os.path.exists(id_arquivo):
+                os.remove(id_arquivo)
             salvar_json(ARQUIVO_ATIVACAO, {})
 
     # ===== TELA DE ATIVAÇÃO =====
@@ -955,13 +971,42 @@ def main(page: ft.Page):
     def verificar_senha(e):
         senha_correta = gerar_senha_por_id(id_dispositivo)
         if senha_input.value == senha_correta:
-            # ===== SALVAR DATA DE ATIVAÇÃO =====
+        # ===== VERIFICA SE JÁ EXISTE ATIVAÇÃO E NÃO EXPIROU =====
+            dados_existente = carregar_json(ARQUIVO_ATIVACAO, {})
+        
+        # Se já estava ativado, verifica se os 30 dias passaram
+            if dados_existente.get("id") == id_dispositivo:
+                try:
+                    data_ativacao = datetime.strptime(dados_existente["data_ativacao"], "%Y-%m-%d")
+                    dias_passados = (datetime.now() - data_ativacao).days
+                
+                    if dias_passados >= 30:
+                    # ===== APAGA O .device_id PARA FORÇAR NOVO ID =====
+                        if 'ANDROID_ROOT' in os.environ:
+                            pasta_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
+                            id_arquivo = os.path.join(pasta_cache, ".device_id")
+                        else:
+                            id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
+                        if os.path.exists(id_arquivo):
+                            os.remove(id_arquivo)
+                    
+                    # Limpa a ativação
+                        salvar_json(ARQUIVO_ATIVACAO, {})
+                    
+                    # Recarrega a página para mostrar o NOVO ID
+                        page.controls.clear()
+                        main(page)
+                        return
+                except:
+                    pass
+        
+        # ===== SALVAR DATA DE ATIVAÇÃO =====
             dados = {
                 "id": id_dispositivo,
                 "data_ativacao": datetime.now().strftime("%Y-%m-%d")
             }
             salvar_json(ARQUIVO_ATIVACAO, dados)
-            # ===================================
+        # ===================================
             page.controls.clear()
             carregar_app_principal(page)
         else:
