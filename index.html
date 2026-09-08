@@ -3,121 +3,113 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SimplyON! - Seu negócio online</title>
+    <title>SimplyON! - Seu negócio no ar, simplesmente online</title>
     <style>
-        /* Reset básico */
-        * {
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        /* Estilos do corpo */
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #121212; /* Fundo dark */
-            color: #e0e0e0;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            flex-direction: column;
-            text-align: center;
-            padding: 20px;
         }
-
-        /* Container principal */
         .container {
-            max-width: 600px;
-            width: 100%;
-            background-color: #1e1e1e; /* Leve contraste para o container */
-            padding: 40px;
+            text-align: center;
+            max-width: 700px;
+            padding: 30px 20px;
+        }
+        .logo {
+            width: 120px;
+            height: 120px;
             border-radius: 24px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); /* Sombra profunda */
+            margin-bottom: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            border: 2px solid #334155;
         }
-
-        /* Logo (imagem centralizada) */
-        .logo-container {
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: center;
-        }
-
-        .logo-img {
-            width: 180px; /* Tamanho ideal */
-            height: auto;
-            /* A logo já tem o efeito 3D e metálico. Vamos apenas garantir que ela se destaque */
-            filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.3));
-        }
-
-        /* Título */
         h1 {
-            font-size: 3rem;
-            font-weight: 800;
-            margin-bottom: 10px;
-            /* Aplicando o degradê ciano/azul idêntico ao do app */
-            background: linear-gradient(to right, #00e5ff, #2979ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            font-size: 2.8rem;
+            margin-bottom: 5px;
+            color: #ffffff;
         }
-
-        /* Subtítulo/Slogan */
-        p.slogan {
+        h1 span {
+            color: #38bdf8; /* O 'ON' em destaque */
+        }
+        .slogan {
             font-size: 1.2rem;
-            color: #9e9e9e;
-            margin-bottom: 40px;
-            line-height: 1.5;
+            color: #94a3b8;
+            margin-bottom: 30px;
         }
-
-        /* Botão de Download */
-        .download-btn {
+        .steps {
+            background-color: #1e293b;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 30px;
+            text-align: left;
+            border: 1px solid #334155;
+        }
+        .steps h3 {
+            color: #38bdf8;
+            margin-top: 0;
+            text-align: center;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+        }
+        .steps p {
+            font-size: 1.0rem;
+            color: #cbd5e1;
+            line-height: 1.6;
+            margin: 10px 0;
+        }
+        .btn {
             display: inline-block;
-            padding: 18px 36px;
-            font-size: 1.2rem;
-            font-weight: bold;
-            color: #121212; /* Cor do texto do botão */
+            padding: 14px 30px;
+            background-color: #38bdf8;
+            color: #0f172a;
             text-decoration: none;
-            background: linear-gradient(to right, #00e5ff, #2979ff); /* Degradê do botão */
-            border-radius: 50px;
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            box-shadow: 0 5px 15px rgba(41, 121, 255, 0.3);
+            font-weight: bold;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 14px rgba(56, 189, 248, 0.4);
+            transition: background-color 0.2s;
         }
-
-        .download-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 20px rgba(41, 121, 255, 0.5);
+        .btn:hover {
+            background-color: #0ea5e9;
         }
-
-        /* Rodapé */
         footer {
-            margin-top: 50px;
-            font-size: 0.9rem;
-            color: #616161;
+            margin-top: 40px;
+            font-size: 0.85rem;
+            color: #64748b;
         }
-
     </style>
 </head>
 <body>
 
     <div class="container">
-        <!-- Área da Logo -->
-        <div class="logo-container">
-            <img src="image_0.png" alt="Logo SimplyON!" class="logo-img">
-        </div>
+        <!-- Logo do App puxando de dentro da pasta assets -->
+        <img src="assets/icone.png" alt="Logo SimplyON" class="logo">
 
         <!-- Título e Slogan -->
-        <h1>SimplyON!</h1>
+        <h1>Simply<span>ON</span></h1>
         <p class="slogan">Seu negócio no ar, simplesmente online</p>
 
-        <!-- Botão de Download do APK -->
-        <!-- Substitua '#' pelo link direto do seu arquivo APK quando tiver um -->
-        <a href="#" class="download-btn">Baixar o APK do SimplyON!</a>
-    </div>
+        <!-- Bloco Explicativo -->
+        <div class="steps">
+            <h3>Como Funciona</h3>
+            <p>🚀 <strong>Criação Prática:</strong> Uma ferramenta mobile eficiente para criação, controle e publicação rápida de páginas web e sites estáticos direto do seu celular.</p>
+            <p>⚡ <strong>Publicação Ágil:</strong> Leve sua estrutura para a web de forma autônoma e integrada ao ecossistema moderno.</p>
+        </div>
 
-    <!-- Rodapé -->
-    <footer>
-        &copy; 2023 SimplyON! Todos os direitos reservados.
-    </footer>
+        <!-- Botão de Download do APK -->
+        <a href="#" class="btn">Baixar Aplicativo APK</a>
+
+        <!-- Rodapé Atualizado -->
+        <footer>
+            &copy; 2026 SimplyON! Todos os direitos reservados.
+        </footer>
+    </div>
 
 </body>
 </html>
