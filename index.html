@@ -3,31 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SimplyON!</title>
+    <title>SimplyON! - Seu negócio online</title>
     <style>
+        /* Reset básico */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Estilos do corpo */
         body {
-            font-family: Arial, sans-serif;
-            background-color: #0f172a;
-            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212; /* Fundo dark */
+            color: #e0e0e0;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            margin: 0;
-        }
-        .container {
+            min-height: 100vh;
+            flex-direction: column;
             text-align: center;
-            max-width: 600px;
             padding: 20px;
         }
-        h1 { font-size: 2.5rem; margin-bottom: 10px; color: #38bdf8; }
-        p { font-size: 1.1rem; color: #94a3b8; line-height: 1.5; }
+
+        /* Container principal */
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background-color: #1e1e1e; /* Leve contraste para o container */
+            padding: 40px;
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); /* Sombra profunda */
+        }
+
+        /* Logo (imagem centralizada) */
+        .logo-container {
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .logo-img {
+            width: 180px; /* Tamanho ideal */
+            height: auto;
+            /* A logo já tem o efeito 3D e metálico. Vamos apenas garantir que ela se destaque */
+            filter: drop-shadow(0 5px 10px rgba(0, 0, 0, 0.3));
+        }
+
+        /* Título */
+        h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 10px;
+            /* Aplicando o degradê ciano/azul idêntico ao do app */
+            background: linear-gradient(to right, #00e5ff, #2979ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Subtítulo/Slogan */
+        p.slogan {
+            font-size: 1.2rem;
+            color: #9e9e9e;
+            margin-bottom: 40px;
+            line-height: 1.5;
+        }
+
+        /* Botão de Download */
+        .download-btn {
+            display: inline-block;
+            padding: 18px 36px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #121212; /* Cor do texto do botão */
+            text-decoration: none;
+            background: linear-gradient(to right, #00e5ff, #2979ff); /* Degradê do botão */
+            border-radius: 50px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            box-shadow: 0 5px 15px rgba(41, 121, 255, 0.3);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(41, 121, 255, 0.5);
+        }
+
+        /* Rodapé */
+        footer {
+            margin-top: 50px;
+            font-size: 0.9rem;
+            color: #616161;
+        }
+
     </style>
 </head>
 <body>
+
     <div class="container">
+        <!-- Área da Logo -->
+        <div class="logo-container">
+            <img src="image_0.png" alt="Logo SimplyON!" class="logo-img">
+        </div>
+
+        <!-- Título e Slogan -->
         <h1>SimplyON!</h1>
-        <p>Plataforma mobile autônoma para criação, controle e publicação rápida de páginas web e ferramentas integradas.</p>
+        <p class="slogan">Seu negócio no ar, simplesmente online</p>
+
+        <!-- Botão de Download do APK -->
+        <!-- Substitua '#' pelo link direto do seu arquivo APK quando tiver um -->
+        <a href="#" class="download-btn">Baixar o APK do SimplyON!</a>
     </div>
+
+    <!-- Rodapé -->
+    <footer>
+        &copy; 2023 SimplyON! Todos os direitos reservados.
+    </footer>
+
 </body>
 </html>
