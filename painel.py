@@ -17,14 +17,12 @@ import sys
 import socket
 import tempfile
 import zipfile
-import uuid
-import hashlib
-from datetime import datetime, timedelta  # <-- IMPORTANTE
 
 # ============================================================
-# ===== SEU ID DO ADSENSE (FIXO) =============================
+# ===== CONFIGURAÇÕES DE ANÚNCIOS ============================
 # ============================================================
-MEU_ADSENSE_ID = "pub-1234567890123456"
+
+LINK_DIRETO = "https://omg10.com/4/11759860"
 
 # ============================================================
 # ===== CONFIGURAÇÕES DE PASTAS ==============================
@@ -36,21 +34,6 @@ ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
 ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
 PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
-
-# ===== LOCAL PERSISTENTE PARA ATIVAÇÃO (IGUAL AO device_id) =====
-# ===== LOCAL PERSISTENTE PARA ATIVAÇÃO =====
-if 'ANDROID_ROOT' in os.environ:
-    # Android: /data/user/0/com.flet.simply_on/files/ativacao.json
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    pasta_persistente = os.path.join(base_dir, '..', '..', '..', 'files')
-    ARQUIVO_ATIVACAO = os.path.join(pasta_persistente, "ativacao.json")
-else:
-    ARQUIVO_ATIVACAO = os.path.join(PASTA_ATUAL, "ativacao.json")
-
-# Cria a pasta persistente se não existir (no Android)
-if 'ANDROID_ROOT' in os.environ:
-    # A pasta já existe, não precisa criar
-    pass
 
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
@@ -67,16 +50,9 @@ def carregar_json(arquivo, padrao):
             return padrao
 
 def salvar_json(arquivo, dados):
-    # Cria a pasta se não existir
-    pasta = os.path.dirname(arquivo)
-    if pasta and not os.path.exists(pasta):
-        os.makedirs(pasta)
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(dados, f, ensure_ascii=False, indent=2)
 
-# ============================================================
-# ===== FUNÇÃO PARA ENDEREÇO DO SERVIDOR =====================
-# ============================================================
 def obter_endereco_servidor():
     if 'ANDROID_ROOT' in os.environ:
         return "127.0.0.1"
@@ -93,55 +69,10 @@ def obter_ip_local():
     except:
         return "127.0.0.1"
 
-# ============================================================
-# ===== FUNÇÕES DE ATIVAÇÃO POR DISPOSITIVO ==================
-# ============================================================
-def obter_id_dispositivo():
-    if 'ANDROID_ROOT' in os.environ:
-        # Android: /data/user/0/com.flet.simply_on/cache/.device_id
-        pasta = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
-        id_arquivo = os.path.join(pasta, ".device_id")
-    else:
-        id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
-
-    if os.path.exists(id_arquivo):
-        with open(id_arquivo, "r") as f:
-            return f.read().strip()
-    
-    try:
-        if 'ANDROID_ROOT' in os.environ:
-            resultado = subprocess.run(
-                ["settings", "get", "secure", "android_id"],
-                capture_output=True,
-                text=True
-            )
-            if resultado.stdout:
-                novo_id = resultado.stdout.strip()
-            else:
-                novo_id = str(uuid.uuid4())
-        else:
-            novo_id = str(uuid.uuid4())
-    except:
-        novo_id = str(uuid.uuid4())
-
-    os.makedirs(os.path.dirname(id_arquivo), exist_ok=True)
-    with open(id_arquivo, "w") as f:
-        f.write(novo_id)
-
-    return novo_id
-
-def gerar_senha_por_id(id_dispositivo):
-    SEGREDO = "VITRINE2025"
-    return hashlib.sha256((id_dispositivo + SEGREDO).encode()).hexdigest()[:8].upper()
-
-# ============================================================
-# ===== SERVIDOR WEB LOCAL ===================================
-# ============================================================
 def iniciar_servidor_web():
     porta = 8550
     diretorio_atual = os.path.dirname(os.path.abspath(__file__))
     os.chdir(diretorio_atual)
-
     Handler = http.server.SimpleHTTPRequestHandler
     try:
         with socketserver.ThreadingTCPServer(("0.0.0.0", porta), Handler) as httpd:
@@ -158,16 +89,9 @@ def disparar_servidor_em_segundo_plano():
     t.start()
     time.sleep(2)
 
-# ============================================================
-# ===== PIKOTUNNEL ===========================================
-# ============================================================
 def verificar_pikotunnel_instalado():
     try:
-        resultado = subprocess.run(
-            ["pm", "list", "packages", "com.pikotunnel"],
-            capture_output=True,
-            text=True
-        )
+        resultado = subprocess.run(["pm", "list", "packages", "com.pikotunnel"], capture_output=True, text=True)
         return "com.pikotunnel" in resultado.stdout
     except:
         return False
@@ -176,15 +100,8 @@ def abrir_pikotunnel(porta=8550):
     if not verificar_pikotunnel_instalado():
         webbrowser.open("https://play.google.com/store/apps/details?id=com.pikotunnel")
         return "❌ PikoTunnel não está instalado. Baixe na Play Store."
-
     try:
-        comando = [
-            "am", "start",
-            "-n", "com.pikotunnel/.MainActivity",
-            "--es", "host", "127.0.0.1",
-            "--es", "port", str(porta),
-            "--ez", "auto_start", "true"
-        ]
+        comando = ["am", "start", "-n", "com.pikotunnel/.MainActivity", "--es", "host", "127.0.0.1", "--es", "port", str(porta), "--ez", "auto_start", "true"]
         subprocess.run(comando, check=True)
         return f"✅ PikoTunnel iniciado para a porta {porta}."
     except Exception as e:
@@ -192,11 +109,7 @@ def abrir_pikotunnel(porta=8550):
 
 def ler_link_pikotunnel():
     try:
-        caminhos = [
-            "/sdcard/pikotunnel.log",
-            "/storage/emulated/0/pikotunnel.log",
-            "/data/data/com.pikotunnel/files/log.txt"
-        ]
+        caminhos = ["/sdcard/pikotunnel.log", "/storage/emulated/0/pikotunnel.log", "/data/data/com.pikotunnel/files/log.txt"]
         for caminho in caminhos:
             if os.path.exists(caminho):
                 with open(caminho, "r") as f:
@@ -208,9 +121,6 @@ def ler_link_pikotunnel():
     except:
         return None
 
-# ============================================================
-# ===== TÚNEL CLOUDFLARE (FALLBACK) =========================
-# ============================================================
 link_publico = ""
 tunel_ativo = False
 processo_tunel = None
@@ -219,7 +129,6 @@ def baixar_cloudflared():
     global PASTA_BIN
     is_windows = sys.platform == "win32"
     is_android = "ANDROID_ROOT" in os.environ or "TERMUX" in os.environ
-
     if is_windows:
         cloudflared_path = os.path.join(PASTA_BIN, "cloudflared.exe")
         url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
@@ -229,10 +138,8 @@ def baixar_cloudflared():
     else:
         cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
         url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
-
     if os.path.exists(cloudflared_path):
         return cloudflared_path
-
     try:
         print(f"📥 Baixando cloudflared de: {url}")
         urllib.request.urlretrieve(url, cloudflared_path)
@@ -247,7 +154,6 @@ def baixar_cloudflared_para_local():
     cloudflared_path = baixar_cloudflared()
     if not cloudflared_path:
         return None
-
     if 'ANDROID_ROOT' in os.environ:
         try:
             destino = "/data/local/tmp/cloudflared"
@@ -256,7 +162,6 @@ def baixar_cloudflared_para_local():
             return destino
         except Exception as e:
             print(f"⚠️ Não foi possível copiar para /data/local/tmp: {e}")
-
     try:
         os.chmod(cloudflared_path, 0o755)
         return cloudflared_path
@@ -278,11 +183,7 @@ def iniciar_tunel_pinggy(porta=8550):
 
 def iniciar_tunel_serveo(porta=8550):
     try:
-        response = requests.post(
-            "https://serveo.net",
-            data={"port": porta},
-            timeout=20
-        )
+        response = requests.post("https://serveo.net", data={"port": porta}, timeout=20)
         if response.status_code == 200:
             match = re.search(r'https://[a-zA-Z0-9-]+\.serveo\.net', response.text)
             if match:
@@ -293,25 +194,15 @@ def iniciar_tunel_serveo(porta=8550):
 
 def iniciar_tunel_cloudflare():
     global link_publico, tunel_ativo, processo_tunel
-
     try:
         cloudflared_path = baixar_cloudflared_para_local()
         if cloudflared_path and os.path.exists(cloudflared_path):
             os.chmod(cloudflared_path, 0o755)
-
             if 'ANDROID_ROOT' in os.environ:
                 comando = ["sh", "-c", f"{cloudflared_path} tunnel --url http://127.0.0.1:8550"]
             else:
                 comando = [cloudflared_path, "tunnel", "--url", "http://localhost:8550"]
-
-            processo_tunel = subprocess.Popen(
-                comando,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=1
-            )
-
+            processo_tunel = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
             time.sleep(5)
             for _ in range(30):
                 line = processo_tunel.stderr.readline() if processo_tunel.stderr else ""
@@ -323,25 +214,21 @@ def iniciar_tunel_cloudflare():
                         link_publico = match.group()
                         tunel_ativo = True
                         return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
-
             time.sleep(10)
             if tunel_ativo and link_publico:
                 return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
     except Exception as e:
         print(f"❌ Erro no cloudflared: {e}")
-
     link, erro = iniciar_tunel_pinggy()
     if link:
         link_publico = link
         tunel_ativo = True
         return f"✅ Túnel Pinggy ativo! Link: {link}"
-
     link, erro = iniciar_tunel_serveo()
     if link:
         link_publico = link
         tunel_ativo = True
         return f"✅ Túnel Serveo ativo! Link: {link}"
-
     ip = obter_ip_local()
     link_publico = f"http://{ip}:8550"
     tunel_ativo = True
@@ -358,17 +245,13 @@ def parar_tunel():
     except Exception as e:
         print(f"Erro ao encerrar túnel: {e}")
 
-# ============================================================
-# ===== CONFIGURAÇÕES DOS NICHOS =============================
-# ============================================================
 def obter_config_nicho(nicho_escolhido):
     configs = {
         "🏍️ Peças de Moto Usada": {
             "icone": "🏍️",
             "categorias_padrao": ["Motor", "Suspensão", "Freio", "Transmissão", "Elétrica", "Carroceria"],
             "cores_sugeridas": ["#ff5722", "#000000", "#ff6b35"],
-            "banners": ["PEÇAS ORIGINAIS PARA SUA MOTO", "CONFIANÇA E QUALIDADE EM CADA PEÇA",
-                        "MELHOR PREÇO DO MERCADO"],
+            "banners": ["PEÇAS ORIGINAIS PARA SUA MOTO", "CONFIANÇA E QUALIDADE EM CADA PEÇA", "MELHOR PREÇO DO MERCADO"],
             "descricao_padrao": "Peça original com garantia de fábrica. Pronta entrega.",
             "exemplos": ["Motor C100", "Amortecedor Dianteiro", "Pastilha de Freio", "Corrente de Transmissão"]
         },
@@ -376,8 +259,7 @@ def obter_config_nicho(nicho_escolhido):
             "icone": "🐶",
             "categorias_padrao": ["Rações", "Brinquedos", "Banho e Tosa", "Acessórios", "Medicamentos", "Higiene"],
             "cores_sugeridas": ["#4caf50", "#8bc34a", "#ff9800"],
-            "banners": ["CUIDADO E CARINHO PARA SEU PET", "OS MELHORES PRODUTOS PARA ANIMAIS",
-                        "AMAMOS SEU ANIMAL DE ESTIMAÇÃO"],
+            "banners": ["CUIDADO E CARINHO PARA SEU PET", "OS MELHORES PRODUTOS PARA ANIMAIS", "AMAMOS SEU ANIMAL DE ESTIMAÇÃO"],
             "descricao_padrao": "Produto de alta qualidade para seu animal. Seguro e confiável.",
             "exemplos": ["Ração Golden 10kg", "Brinquedo Interativo", "Coleira Antipulgas", "Shampoo Hipoalergênico"]
         },
@@ -504,13 +386,9 @@ def obter_config_nicho(nicho_escolhido):
     }
     return configs.get(nicho_escolhido, configs["🏍️ Peças de Moto Usada"])
 
-# ============================================================
-# ===== GERAR SITE ===========================================
-# ============================================================
 def gerar_arquivo_site(nova_config):
     nicho = nova_config.get("nicho", "🏍️ Peças de Moto Usada")
     config_nicho = obter_config_nicho(nicho)
-
     cor_hex = nova_config.get("cor_principal", "#ff5722")
     whatsapp_numero = nova_config.get("whatsapp_contato", "5528999999999")
     instagram_link = nova_config.get("instagram_url", "https://instagram.com")
@@ -518,53 +396,31 @@ def gerar_arquivo_site(nova_config):
     banners = nova_config.get("banners", [])
     cnpj_info = nova_config.get("cnpj_empresa", "CNPJ: 00.000.000/0001-00")
     logo_url = nova_config.get("logo_url", "")
-    adsense_id = MEU_ADSENSE_ID
-
     if not banners or not banners[0].get("url"):
-        banners = [
-            {"url": "https://images.unsplash.com/photo-1558981403-c5f9899a28bc", "frase": config_nicho["banners"][0]},
-            {"url": "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87", "frase": config_nicho["banners"][1]},
-            {"url": "https://images.unsplash.com/photo-1609630875176-b800c92cf03d", "frase": config_nicho["banners"][2]}
-        ]
-
+        banners = [{"url": "https://images.unsplash.com/photo-1558981403-c5f9899a28bc", "frase": config_nicho["banners"][0]}, {"url": "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87", "frase": config_nicho["banners"][1]}, {"url": "https://images.unsplash.com/photo-1609630875176-b800c92cf03d", "frase": config_nicho["banners"][2]}]
     if tema == "Claro":
-        bg_body = "#f4f6f8"
-        bg_header = "#ffffff"
-        bg_card = "#ffffff"
-        text_main = "#222222"
-        text_muted = "#666666"
-        border_color = "#e0e0e0"
-        input_bg = "#ffffff"
+        bg_body = "#f4f6f8"; bg_header = "#ffffff"; bg_card = "#ffffff"; text_main = "#222222"; text_muted = "#666666"; border_color = "#e0e0e0"; input_bg = "#ffffff"
     else:
-        bg_body = "#121212"
-        bg_header = "#1a1a1a"
-        bg_card = "#1a1a1a"
-        text_main = "#f1f1f1"
-        text_muted = "#aaaaaa"
-        border_color = "#333333"
-        input_bg = "#121212"
-
+        bg_body = "#121212"; bg_header = "#1a1a1a"; bg_card = "#1a1a1a"; text_main = "#f1f1f1"; text_muted = "#aaaaaa"; border_color = "#333333"; input_bg = "#121212"
     carousel_html = ""
     for i, banner in enumerate(banners):
         url = banner.get("url", "")
         active = "active" if i == 0 else ""
         carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
 
-    adsense_html = ""
-    if adsense_id:
-        adsense_html = f"""
-        <div style="max-width:1100px; margin:20px auto; padding:0 15px;">
-            <ins class="adsbygoogle"
-                 style="display:block"
-                 data-ad-client="{adsense_id}"
-                 data-ad-slot="1234567890"
-                 data-ad-format="auto"
-                 data-full-width-responsive="true"></ins>
-            <script>
-                 (adsbygoogle = window.adsbygoogle || []).push{{}});
-            </script>
-        </div>
-        """
+    anuncio_html = f"""
+    <div style="max-width:1100px; margin:20px auto; padding:0 15px; text-align:center;">
+        <a href="{LINK_DIRETO}" target="_blank" 
+           style="display:inline-block; background:linear-gradient(135deg,#ff5722,#ff9800); 
+                  color:white; padding:15px 30px; border-radius:50px; 
+                  font-size:16px; font-weight:bold; text-decoration:none; 
+                  box-shadow:0 4px 15px rgba(255,87,34,0.4);
+                  transition:transform 0.2s;">
+            🔥 Ofertas Especiais para Você!
+        </a>
+        <p style="color:#888; font-size:12px; margin-top:8px;">Apoie o projeto SimplyON</p>
+    </div>
+    """
 
     html_conteudo = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -573,11 +429,9 @@ def gerar_arquivo_site(nova_config):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{nova_config.get('nome_loja', 'Loja')}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    {f'<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={adsense_id}" crossorigin="anonymous"></script>' if adsense_id else ''}
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{ font-family: 'Helvetica Neue', Arial, sans-serif; background: {bg_body}; color: {text_main}; }}
-
         header {{ display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: {bg_header}; border-bottom: 1px solid {border_color}; gap: 15px; flex-wrap: wrap; position: sticky; top: 0; z-index: 100; }}
         .logo-container {{ display: flex; align-items: center; }}
         .logo {{ max-height: 80px !important; width: auto; object-fit: contain; display: block; }}
@@ -591,72 +445,22 @@ def gerar_arquivo_site(nova_config):
         .social-icons a.instagram:hover {{ color: #e1306c; }}
         .btn-carrinho-topo {{ background: {cor_hex}; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; display: flex; align-items: center; gap: 8px; font-size: 14px; transition: opacity 0.2s; }}
         .btn-carrinho-topo:hover {{ opacity: 0.85; }}
-
-        .carousel-container {{
-            position: relative;
-            width: 100%;
-            height: auto;
-            aspect-ratio: 16 / 9;
-            overflow: hidden;
-        }}
-        .carousel-slide {{
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-size: cover;
-            background-position: center;
-            opacity: 0;
-            transition: opacity 1.2s ease-in-out;
-        }}
-        .carousel-slide.active {{
-            opacity: 1;
-        }}
-        .carousel-slide::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.15);
-            z-index: 1;
-        }}
-
+        .carousel-container {{ position: relative; width: 100%; height: auto; aspect-ratio: 16 / 9; overflow: hidden; }}
+        .carousel-slide {{ position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-size: cover; background-position: center; opacity: 0; transition: opacity 1.2s ease-in-out; }}
+        .carousel-slide.active {{ opacity: 1; }}
+        .carousel-slide::before {{ content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.15); z-index: 1; }}
         .linha-destaque {{ height: 3px; background-color: {cor_hex}; width: 100%; }}
         .container {{ max-width: 1100px; margin: 30px auto; padding: 0 15px; min-height: 400px; }}
         h2 {{ font-size: 20px; text-transform: uppercase; letter-spacing: 1px; border-left: 4px solid {cor_hex}; padding-left: 10px; color: {text_main}; margin-bottom: 20px; }}
-
         .filtros-container {{ display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; padding: 10px 0; border-bottom: 1px solid {border_color}; }}
         .filtro-btn {{ padding: 6px 14px; border: 2px solid {border_color}; border-radius: 25px; background: transparent; color: {text_muted}; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.3s ease; text-transform: capitalize; }}
         .filtro-btn:hover, .filtro-btn.ativo {{ background: {cor_hex}; color: #fff; border-color: {cor_hex}; }}
         .filtro-btn .contagem {{ display: inline-block; background: rgba(255,255,255,0.2); border-radius: 12px; padding: 0 8px; font-size: 11px; margin-left: 5px; }}
         .filtro-btn.ativo .contagem {{ background: rgba(255,255,255,0.3); }}
-
-        .grid-produtos {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 15px;
-        }}
-        .card {{
-            background: {bg_card};
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            border: 1px solid {border_color};
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            transition: transform 0.2s;
-            position: relative;
-        }}
+        .grid-produtos {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; }}
+        .card {{ background: {bg_card}; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid {border_color}; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s; position: relative; }}
         .card:hover {{ transform: translateY(-4px); }}
-        .card img {{
-            width: 100%;
-            height: 150px;
-            object-fit: cover;
-        }}
+        .card img {{ width: 100%; height: 150px; object-fit: cover; }}
         .badge-destaque {{ position: absolute; top: 10px; right: 10px; background: #ffd700; color: #000; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; z-index: 5; }}
         .card-body {{ padding: 12px; }}
         .categoria-tag {{ font-size: 11px; color: {cor_hex}; text-transform: uppercase; font-weight: bold; display: inline-block; margin-bottom: 4px; }}
@@ -667,7 +471,6 @@ def gerar_arquivo_site(nova_config):
         .btn-adicionar {{ background: {cor_hex}; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; transition: opacity 0.2s; }}
         .btn-adicionar:hover {{ opacity: 0.85; }}
         .sem-produtos {{ color: {text_muted}; text-align: center; padding: 40px 20px; grid-column: 1/-1; }}
-
         .modal-carrinho {{ display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: flex-end; }}
         .modal-conteudo {{ background: {bg_card}; width: 100%; max-width: 400px; height: 100%; padding: 25px; display: flex; flex-direction: column; justify-content: space-between; border-left: 1px solid {border_color}; animation: slideIn 0.3s ease; }}
         @keyframes slideIn {{ from {{ transform: translateX(100%); }} to {{ transform: translateX(0); }} }}
@@ -678,27 +481,10 @@ def gerar_arquivo_site(nova_config):
         .carrinho-footer {{ border-top: 1px solid {border_color}; padding-top: 15px; }}
         .btn-fechar-pedido {{ background: #25d366; color: #fff; width: 100%; padding: 12px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; }}
         .btn-fechar-pedido:hover {{ background: #1ebd5b; }}
-
         footer {{ margin-top: 40px; padding: 30px 20px; background: {bg_header}; border-top: 1px solid {border_color}; text-align: center; color: {text_muted}; font-size: 13px; }}
         footer p {{ margin: 5px 0; }}
-
-        @media (max-width: 600px) {{
-            header {{ padding: 10px 15px; }}
-            .logo {{ max-height: 50px !important; }}
-            .search-header {{ max-width: 160px; min-width: 100px; }}
-            .btn-carrinho-topo {{ padding: 5px 10px; font-size: 11px; }}
-            .filtros-container {{ gap: 5px; }}
-            .filtro-btn {{ padding: 5px 10px; font-size: 11px; }}
-            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }}
-            .card img {{ height: 120px; }}
-            .carousel-container {{ aspect-ratio: 16 / 9; }}
-            .card-title {{ font-size: 14px; }}
-            .preco {{ font-size: 14px; }}
-        }}
-        @media (max-width: 400px) {{
-            .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }}
-            .card img {{ height: 100px; }}
-        }}
+        @media (max-width: 600px) {{ header {{ padding: 10px 15px; }} .logo {{ max-height: 50px !important; }} .search-header {{ max-width: 160px; min-width: 100px; }} .btn-carrinho-topo {{ padding: 5px 10px; font-size: 11px; }} .filtros-container {{ gap: 5px; }} .filtro-btn {{ padding: 5px 10px; font-size: 11px; }} .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }} .card img {{ height: 120px; }} .carousel-container {{ aspect-ratio: 16 / 9; }} .card-title {{ font-size: 14px; }} .preco {{ font-size: 14px; }} }}
+        @media (max-width: 400px) {{ .grid-produtos {{ grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }} .card img {{ height: 100px; }} }}
     </style>
 </head>
 <body>
@@ -721,7 +507,7 @@ def gerar_arquivo_site(nova_config):
     </header>
     <div class="carousel-container" id="carousel">{carousel_html}</div>
     <div class="linha-destaque"></div>
-    {adsense_html}
+    {anuncio_html}
     <div class="container">
         <h2>Catálogo Disponível</h2>
         <div class="filtros-container" id="filtrosContainer"></div>
@@ -760,7 +546,6 @@ def gerar_arquivo_site(nova_config):
         let carrinho = [];
         let categoriaAtiva = 'todos';
         let termoBusca = '';
-
         function extrairCategorias(produtos) {{
             const categorias = new Set();
             categorias.add('todos');
@@ -769,12 +554,10 @@ def gerar_arquivo_site(nova_config):
             }});
             return Array.from(categorias);
         }}
-
         function contarPorCategoria(produtos, categoria) {{
             if (categoria === 'todos') return produtos.length;
             return produtos.filter(item => item.categoria && item.categoria.trim() === categoria).length;
         }}
-
         function gerarBotoesFiltro(produtos) {{
             const container = document.getElementById('filtrosContainer');
             const categorias = extrairCategorias(produtos);
@@ -787,18 +570,15 @@ def gerar_arquivo_site(nova_config):
             }});
             container.innerHTML = html;
         }}
-
         function filtrarPorCategoria(categoria) {{
             categoriaAtiva = categoria;
             document.querySelectorAll('.filtro-btn').forEach(btn => btn.classList.toggle('ativo', btn.dataset.categoria === categoria));
             aplicarFiltros();
         }}
-
         function filtrarProdutos() {{
             termoBusca = document.getElementById('searchInput').value.toLowerCase();
             aplicarFiltros();
         }}
-
         function aplicarFiltros() {{
             const termo = termoBusca || document.getElementById('searchInput').value.toLowerCase();
             let produtosFiltrados = listaProdutos;
@@ -815,7 +595,6 @@ def gerar_arquivo_site(nova_config):
             }}
             exibirProdutos(produtosFiltrados);
         }}
-
         function exibirProdutos(produtos) {{
             const vitrine = document.getElementById('vitrine');
             vitrine.innerHTML = '';
@@ -845,20 +624,17 @@ def gerar_arquivo_site(nova_config):
                 `;
             }});
         }}
-
         function adicionarAoCarrinho(nome, preco) {{
             carrinho.push({{ nome, preco }});
             document.getElementById('contadorCarrinho').innerText = carrinho.length;
             atualizarCarrinhoUI();
             abrirCarrinho();
         }}
-
         function removerDoCarrinho(index) {{
             carrinho.splice(index, 1);
             document.getElementById('contadorCarrinho').innerText = carrinho.length;
             atualizarCarrinhoUI();
         }}
-
         function atualizarCarrinhoUI() {{
             const container = document.getElementById('listaCarrinho');
             if (carrinho.length === 0) {{
@@ -878,10 +654,8 @@ def gerar_arquivo_site(nova_config):
                 `;
             }});
         }}
-
         function abrirCarrinho() {{ document.getElementById('modalCarrinho').style.display = 'flex'; }}
         function fecharCarrinho() {{ document.getElementById('modalCarrinho').style.display = 'none'; }}
-
         function enviarPedidoWhatsApp() {{
             if (carrinho.length === 0) return;
             let texto = "Olá! Gostaria de fechar o seguinte pedido:%0A%0A";
@@ -891,20 +665,17 @@ def gerar_arquivo_site(nova_config):
             texto += "%0AConfirma a disponibilidade?";
             window.open(`https://wa.me/${{numeroZap}}?text=${{texto}}`, '_blank');
         }}
-
         gerarBotoesFiltro(listaProdutos);
         exibirProdutos(listaProdutos);
     </script>
 </body>
-</html>
-"""
+</html>"""
     with open(ARQUIVO_HTML, "w", encoding="utf-8") as f:
         f.write(html_conteudo)
-
     disparar_servidor_em_segundo_plano()
 
 # ============================================================
-# ===== FUNÇÃO PRINCIPAL =====================================
+# ===== FUNÇÃO PRINCIPAL (COM SPLASH E TELA DE OFERTA) ======
 # ============================================================
 def main(page: ft.Page):
     global link_publico, tunel_ativo
@@ -914,106 +685,8 @@ def main(page: ft.Page):
     page.window.width = 480
     page.window.height = 720
 
-    # ===== VERIFICAR SE JÁ ESTÁ ATIVADO E NÃO EXPIRou =====
-    # ===== VERIFICAR SE JÁ ESTÁ ATIVADO E NÃO EXPIRou =====
-    dados_ativacao = carregar_json(ARQUIVO_ATIVACAO, {})
-    id_atual = obter_id_dispositivo()
-
-    if dados_ativacao.get("id") == id_atual:
-        try:
-            data_ativacao = datetime.strptime(dados_ativacao["data_ativacao"], "%Y-%m-%d")
-            dias_passados = (datetime.now() - data_ativacao).days
-        
-            if dias_passados < 30:
-            # Ainda válido → carrega o app direto
-                carregar_app_principal(page)
-                return
-            else:
-            # ===== APAGA O .device_id PARA FORÇAR NOVO ID =====
-                if 'ANDROID_ROOT' in os.environ:
-                    pasta_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
-                    id_arquivo = os.path.join(pasta_cache, ".device_id")
-                else:
-                    id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
-                if os.path.exists(id_arquivo):
-                    os.remove(id_arquivo)
-            
-            # Limpa a ativação
-                salvar_json(ARQUIVO_ATIVACAO, {})
-                page.open(ft.SnackBar(content=ft.Text("⚠️ Sua assinatura expirou! O ID foi renovado. Solicite uma nova senha.")))
-        except:
-        # Em caso de erro, força renovação
-            if 'ANDROID_ROOT' in os.environ:
-                pasta_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
-                id_arquivo = os.path.join(pasta_cache, ".device_id")
-            else:
-                id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
-            if os.path.exists(id_arquivo):
-                os.remove(id_arquivo)
-            salvar_json(ARQUIVO_ATIVACAO, {})
-
-    # ===== TELA DE ATIVAÇÃO =====
-    id_dispositivo = id_atual
-    senha_input = ft.TextField(label="Senha de ativação", password=True, width=280)
-    msg_erro = ft.Text("", color="red", size=14)
-
-    def solicitar_ativacao(e):
-        mensagem = f"Olá! Meu ID de ativação é: {id_dispositivo}. Por favor, me envie a senha."
-        url = f"https://wa.me/5528988049598?text={mensagem}"
-        try:
-            page.launch_url(url)
-            page.open(ft.SnackBar(content=ft.Text("✅ Abrindo WhatsApp...")))
-        except:
-            page.set_clipboard(id_dispositivo)
-            page.open(ft.SnackBar(content=ft.Text(f"⚠️ ID copiado: {id_dispositivo}. Envie no WhatsApp.")))
-        page.update()
-
-    def verificar_senha(e):
-        senha_correta = gerar_senha_por_id(id_dispositivo)
-        if senha_input.value == senha_correta:
-        # ===== VERIFICA SE JÁ EXISTE ATIVAÇÃO E NÃO EXPIROU =====
-            dados_existente = carregar_json(ARQUIVO_ATIVACAO, {})
-        
-        # Se já estava ativado, verifica se os 30 dias passaram
-            if dados_existente.get("id") == id_dispositivo:
-                try:
-                    data_ativacao = datetime.strptime(dados_existente["data_ativacao"], "%Y-%m-%d")
-                    dias_passados = (datetime.now() - data_ativacao).days
-                
-                    if dias_passados >= 30:
-                    # ===== APAGA O .device_id PARA FORÇAR NOVO ID =====
-                        if 'ANDROID_ROOT' in os.environ:
-                            pasta_cache = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'cache')
-                            id_arquivo = os.path.join(pasta_cache, ".device_id")
-                        else:
-                            id_arquivo = os.path.join(PASTA_ATUAL, ".device_id")
-                        if os.path.exists(id_arquivo):
-                            os.remove(id_arquivo)
-                    
-                    # Limpa a ativação
-                        salvar_json(ARQUIVO_ATIVACAO, {})
-                    
-                    # Recarrega a página para mostrar o NOVO ID
-                        page.controls.clear()
-                        main(page)
-                        return
-                except:
-                    pass
-        
-        # ===== SALVAR DATA DE ATIVAÇÃO =====
-            dados = {
-                "id": id_dispositivo,
-                "data_ativacao": datetime.now().strftime("%Y-%m-%d")
-            }
-            salvar_json(ARQUIVO_ATIVACAO, dados)
-        # ===================================
-            page.controls.clear()
-            carregar_app_principal(page)
-        else:
-            msg_erro.value = "❌ Senha incorreta! Tente novamente."
-            page.update()
-
-    tela_ativacao = ft.Container(
+    # ===== TELA DE SPLASH =====
+    splash = ft.Container(
         expand=True,
         image=ft.DecorationImage(
             src="assets/splash.png",
@@ -1023,56 +696,35 @@ def main(page: ft.Page):
             ft.Container(expand=True),
             ft.Container(
                 content=ft.Column([
-                    ft.Row([
-                        ft.IconButton(
-                            icon=ft.Icons.COPY,
-                            tooltip="Copiar ID",
-                            on_click=lambda e: page.set_clipboard(id_dispositivo),
-                        ),
-                        ft.Text(
-                            f"🔑 ID: {id_dispositivo}",
-                            size=14,
+                    ft.Container(
+                        content=ft.Text(
+                            "Carregando...",
+                            size=16,
                             color="white",
                         ),
-                    ], alignment=ft.MainAxisAlignment.CENTER),
-                    ft.Container(height=1),
-                    ft.ElevatedButton(
-                        "📱 Abrir WhatsApp (ou copiar ID)",
-                        on_click=solicitar_ativacao,
-                        bgcolor="#25d366",
-                        color="white",
-                        width=280,
+                        bgcolor="#00000066",
+                        padding=8,
+                        border_radius=5,
                     ),
-                    ft.Container(height=1),
-                    ft.Text("Digite a senha recebida:", size=14, color="white"),
-                    senha_input,
-                    msg_erro,
-                    ft.ElevatedButton(
-                        "🔓 Ativar",
-                        on_click=verificar_senha,
-                        bgcolor="#ff5722",
-                        color="white",
-                        width=280,
-                    ),
-                    ft.Container(height=10),
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                 alignment=ft.alignment.bottom_center,
             ),
         ]),
     )
 
-    page.add(tela_ativacao)
+    page.add(splash)
     page.update()
 
-    # ===== APP PRINCIPAL =====
-    def carregar_app_principal(page):
-        # ===== INTERCEPTAR TECLA "VOLTAR" =====
-        def on_keyboard(e: ft.KeyboardEvent):
-            if e.key == "Back":
-                page.open(ft.SnackBar(content=ft.Text("🔄 Use o botão Home ou minimize para manter o site ativo.")))
-                return True
+    def on_keyboard(e: ft.KeyboardEvent):
+        if e.key == "Back":
+            page.open(ft.SnackBar(content=ft.Text("🔄 Use o botão Home ou minimize para manter o site ativo.")))
+            return True
 
-        page.on_keyboard_event = on_keyboard
+    page.on_keyboard_event = on_keyboard
+
+    def carregar_app_com_splash():
+        import time
+        time.sleep(2)
 
         config = carregar_json(ARQUIVO_CONFIG, {
             "nome_loja": "Sua Loja",
@@ -1093,7 +745,6 @@ def main(page: ft.Page):
 
         estoque = carregar_json(ARQUIVO_JSON, [])
 
-        # ===== CAMPOS DO FORMULÁRIO =====
         txt_nome = ft.TextField(label="Nome da Peça")
         txt_modelo = ft.TextField(label="Modelo")
         txt_categoria = ft.TextField(label="Categoria")
@@ -1101,7 +752,6 @@ def main(page: ft.Page):
         txt_desc = ft.TextField(label="Descrição")
         txt_destaque = ft.Dropdown(label="Produto Destaque?", value="Não", options=[ft.dropdown.Option("Não"), ft.dropdown.Option("Sim")])
 
-        # ===== CAMPOS DE IMAGEM DO PRODUTO =====
         caminho_imagem_selecionada = ""
         txt_imagem_nome = ft.Text("📷 Nenhuma imagem selecionada", size=12, color="#888")
 
@@ -1121,7 +771,6 @@ def main(page: ft.Page):
             file_picker_imagem.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"])
         btn_selecionar_imagem = ft.ElevatedButton("📁 Selecionar Imagem", on_click=selecionar_imagem_click, icon=ft.Icons.FOLDER_OPEN)
 
-        # ===== LOGO =====
         caminho_logo_selecionada = ""
         txt_logo_nome = ft.Text("📷 Nenhuma logo selecionada", size=12, color="#888")
 
@@ -1140,7 +789,6 @@ def main(page: ft.Page):
             file_picker_logo.pick_files(allow_multiple=False, allowed_extensions=["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"])
         btn_selecionar_logo = ft.ElevatedButton("📁 Selecionar Logo", on_click=selecionar_logo_click, icon=ft.Icons.FOLDER_OPEN)
 
-        # ===== BANNERS =====
         caminho_banner1_selecionado = ""
         txt_banner1_nome = ft.Text("📷 Nenhum banner 1 selecionado", size=12, color="#888")
 
@@ -1258,16 +906,7 @@ def main(page: ft.Page):
 
         def salvar_peca(e):
             nonlocal estoque, caminho_imagem_selecionada
-            item_novo = {
-                "id": len(estoque) + 1 if not estoque else max(item["id"] for item in estoque) + 1,
-                "nome": txt_nome.value,
-                "modelo": txt_modelo.value,
-                "categoria": txt_categoria.value,
-                "status": "Disponível",
-                "preco": txt_preco.value,
-                "descricao": txt_desc.value,
-                "destaque": txt_destaque.value == "Sim"
-            }
+            item_novo = {"id": len(estoque) + 1 if not estoque else max(item["id"] for item in estoque) + 1, "nome": txt_nome.value, "modelo": txt_modelo.value, "categoria": txt_categoria.value, "status": "Disponível", "preco": txt_preco.value, "descricao": txt_desc.value, "destaque": txt_destaque.value == "Sim"}
             imagem_final = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc"
             if caminho_imagem_selecionada and os.path.exists(caminho_imagem_selecionada):
                 try:
@@ -1321,17 +960,7 @@ def main(page: ft.Page):
                     imagem_url = "https://images.unsplash.com/photo-1558981403-c5f9899a28bc"
                     if col_imagem and pd.notna(row[col_imagem]):
                         imagem_url = str(row[col_imagem])
-                    item = {
-                        "id": proximo_id,
-                        "nome": nome_val,
-                        "modelo": str(row[col_modelo]) if col_modelo and pd.notna(row[col_modelo]) else "Padrão",
-                        "categoria": str(row[col_categoria]) if col_categoria and pd.notna(row[col_categoria]) else "Geral",
-                        "status": "Disponível",
-                        "preco": str(row[col_preco]) if pd.notna(row[col_preco]) else "R$ 0,00",
-                        "descricao": str(row[col_desc]) if col_desc and pd.notna(row[col_desc]) else "",
-                        "imagem": imagem_url,
-                        "destaque": False
-                    }
+                    item = {"id": proximo_id, "nome": nome_val, "modelo": str(row[col_modelo]) if col_modelo and pd.notna(row[col_modelo]) else "Padrão", "categoria": str(row[col_categoria]) if col_categoria and pd.notna(row[col_categoria]) else "Geral", "status": "Disponível", "preco": str(row[col_preco]) if pd.notna(row[col_preco]) else "R$ 0,00", "descricao": str(row[col_desc]) if col_desc and pd.notna(row[col_desc]) else "", "imagem": imagem_url, "destaque": False}
                     estoque.append(item)
                     proximo_id += 1
                     novos_itens += 1
@@ -1344,9 +973,6 @@ def main(page: ft.Page):
                 page.open(ft.SnackBar(content=ft.Text(f"❌ Erro: {str(ex)}")))
                 page.update()
 
-        # ============================================================
-        # ===== FUNÇÕES DE HOSPEDAGEM =================================
-        # ============================================================
         def carregar_config_upload():
             padrao = {"servico": "Netlify", "token": "", "site_name": "", "github_repo": ""}
             if not os.path.exists(ARQUIVO_UPLOAD_CONFIG):
@@ -1357,9 +983,9 @@ def main(page: ft.Page):
                 return json.load(f)
 
         def salvar_config_upload(token, site_name, servico, github_repo):
-            config = {"servico": servico, "token": token, "site_name": site_name, "github_repo": github_repo}
+            config_data = {"servico": servico, "token": token, "site_name": site_name, "github_repo": github_repo}
             with open(ARQUIVO_UPLOAD_CONFIG, "w", encoding="utf-8") as f:
-                json.dump(config, f, indent=2)
+                json.dump(config_data, f, indent=2)
             return True
 
         def testar_conexao_netlify(token):
@@ -1460,9 +1086,6 @@ def main(page: ft.Page):
             except Exception as e:
                 return None, f"Erro ao hospedar: {str(e)}"
 
-        # ============================================================
-        # ===== CONFIGURAÇÕES ========================================
-        # ============================================================
         file_picker = ft.FilePicker()
         file_picker.on_result = importar_planilha_result
         page.overlay.append(file_picker)
@@ -1590,20 +1213,7 @@ def main(page: ft.Page):
             txt_status_hospedagem.color = "#4caf50"
 
         link_text = ft.Text("Nenhum link gerado ainda", expand=True)
-        link_exibicao = ft.Container(
-            content=ft.Column([
-                ft.Text("🔗 Link Público:", weight=ft.FontWeight.BOLD, size=14),
-                ft.Row([
-                    link_text,
-                    ft.IconButton(icon=ft.Icons.COPY, tooltip="Copiar link", on_click=lambda e: copiar_link(e), disabled=True),
-                ]),
-            ]),
-            padding=10,
-            bgcolor="#1e1e1e",
-            border_radius=6,
-            margin=ft.margin.only(top=10),
-            visible=False
-        )
+        link_exibicao = ft.Container(content=ft.Column([ft.Text("🔗 Link Público:", weight=ft.FontWeight.BOLD, size=14), ft.Row([link_text, ft.IconButton(icon=ft.Icons.COPY, tooltip="Copiar link", on_click=lambda e: copiar_link(e), disabled=True)])]), padding=10, bgcolor="#1e1e1e", border_radius=6, margin=ft.margin.only(top=10), visible=False)
 
         def mostrar_link(link):
             link_text.value = link
@@ -1713,18 +1323,7 @@ def main(page: ft.Page):
             if not banners:
                 config_nicho = obter_config_nicho(dropdown_nicho.value)
                 banners = [{"url": "https://images.unsplash.com/photo-1558981403-c5f9899a28bc", "frase": config_nicho["banners"][0]}, {"url": "https://images.unsplash.com/photo-1568772585407-9361f9bf3a87", "frase": config_nicho["banners"][1]}, {"url": "https://images.unsplash.com/photo-1609630875176-b800c92cf03d", "frase": config_nicho["banners"][2]}]
-            config = {
-                "nome_loja": txt_nome_loja.value,
-                "subtitulo": config.get("subtitulo", ""),
-                "cnpj_empresa": txt_cnpj.value,
-                "cor_principal": cores_disponiveis.get(cor_selecionada, "#ff5722"),
-                "logo_url": logo_final,
-                "banners": banners,
-                "whatsapp_contato": txt_whatsapp.value,
-                "instagram_url": txt_instagram.value,
-                "tema_site": dropdown_tema.value,
-                "nicho": dropdown_nicho.value
-            }
+            config = {"nome_loja": txt_nome_loja.value, "subtitulo": config.get("subtitulo", ""), "cnpj_empresa": txt_cnpj.value, "cor_principal": cores_disponiveis.get(cor_selecionada, "#ff5722"), "logo_url": logo_final, "banners": banners, "whatsapp_contato": txt_whatsapp.value, "instagram_url": txt_instagram.value, "tema_site": dropdown_tema.value, "nicho": dropdown_nicho.value}
             salvar_json(ARQUIVO_CONFIG, config)
             gerar_arquivo_site(config)
             page.open(ft.SnackBar(content=ft.Text("✅ Configurações salvas e Site gerado!")))
@@ -1751,18 +1350,7 @@ def main(page: ft.Page):
 
         atualizar_lista()
 
-        banner_admob = ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.ADS_CLICK, size=20, color="#4caf50"),
-                ft.Text("📢 Anúncio AdMob (placeholder)", size=12, color="#888"),
-            ], alignment=ft.MainAxisAlignment.CENTER),
-            height=50,
-            bgcolor="#1e1e1e",
-            border=ft.border.all(1, "#333333"),
-            border_radius=4,
-            margin=ft.margin.only(top=10),
-            padding=10,
-        )
+        banner_admob = ft.Container(content=ft.Row([ft.Icon(ft.Icons.ADS_CLICK, size=20, color="#4caf50"), ft.Text("📢 Anúncio AdMob (placeholder)", size=12, color="#888")], alignment=ft.MainAxisAlignment.CENTER), height=50, bgcolor="#1e1e1e", border=ft.border.all(1, "#333333"), border_radius=4, margin=ft.margin.only(top=10), padding=10)
 
         coluna_cadastro = ft.Column([
             ft.Text("📌 Tipo de Comércio", weight=ft.FontWeight.BOLD, size=16),
@@ -1803,6 +1391,62 @@ def main(page: ft.Page):
             ft.ElevatedButton(content=ft.Text("💾 Salvar e Gerar Site"), on_click=salvar_config)
         ], scroll=ft.ScrollMode.AUTO)
 
+        # ============================================================
+        # ===== FUNÇÃO PARA GERAR SITE COM OFERTA ===================
+        # ============================================================
+        def gerar_site_com_oferta(e):
+            def continuar_geracao(e):
+                page.launch_url(LINK_DIRETO)
+                dialog.open = False
+                page.update()
+                salvar_config(None)
+                page.open(ft.SnackBar(content=ft.Text("✅ Site gerado com sucesso!")))
+                page.update()
+
+            def pular(e):
+                dialog.open = False
+                page.update()
+                salvar_config(None)
+                page.open(ft.SnackBar(content=ft.Text("✅ Site gerado com sucesso!")))
+                page.update()
+
+            dialog = ft.AlertDialog(
+                title=ft.Text("📢 Apoie o Projeto"),
+                content=ft.Column([
+                    ft.Text(
+                        "O SimplyON é gratuito graças ao apoio de parceiros!",
+                        size=14,
+                    ),
+                    ft.Text(
+                        "Para gerar seu site, clique no link abaixo e veja ofertas exclusivas.",
+                        size=13,
+                        color="#888",
+                    ),
+                    ft.Container(height=10),
+                    ft.ElevatedButton(
+                        "🔥 Ver ofertas e gerar site",
+                        on_click=continuar_geracao,
+                        bgcolor="#ff5722",
+                        color="white",
+                        width=300,
+                    ),
+                    ft.TextButton(
+                        "Pular (mas o projeto precisa do seu apoio!)",
+                        on_click=pular,
+                    ),
+                ]),
+                actions_alignment=ft.MainAxisAlignment.CENTER,
+            )
+            page.open(dialog)
+            page.update()
+
+        btn_gerar_site = ft.ElevatedButton(
+            text="💾 Salvar e Gerar Site",
+            on_click=gerar_site_com_oferta,
+            icon=ft.Icons.SAVE,
+        )
+        coluna_config.controls[-1] = btn_gerar_site
+
         painel_conteudo = ft.Container(content=coluna_cadastro, padding=10)
 
         def mudar_secao(e):
@@ -1814,18 +1458,14 @@ def main(page: ft.Page):
                 painel_conteudo.content = coluna_hospedagem
             page.update()
 
-        page.navigation_bar = ft.NavigationBar(
-            selected_index=0,
-            on_change=mudar_secao,
-            destinations=[
-                ft.NavigationBarDestination(icon=ft.Icons.ADD_BOX, label="Cadastro"),
-                ft.NavigationBarDestination(icon=ft.Icons.SETTINGS, label="Configurações"),
-                ft.NavigationBarDestination(icon=ft.Icons.CLOUD, label="Hospedagem"),
-            ]
-        )
-
+        page.navigation_bar = ft.NavigationBar(selected_index=0, on_change=mudar_secao, destinations=[ft.NavigationBarDestination(icon=ft.Icons.ADD_BOX, label="Cadastro"), ft.NavigationBarDestination(icon=ft.Icons.SETTINGS, label="Configurações"), ft.NavigationBarDestination(icon=ft.Icons.CLOUD, label="Hospedagem")])
         page.scroll = ft.ScrollMode.AUTO
+
+        page.controls.clear()
         page.add(painel_conteudo)
+        page.update()
+
+    threading.Thread(target=carregar_app_com_splash, daemon=True).start()
 
 if __name__ == "__main__":
     ft.app(target=main)
