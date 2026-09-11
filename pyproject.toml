@@ -1,8 +1,38 @@
-[tool.flet]
-project_name = "SimplyON"
-package_name = "com.simplyon.app"   # <-- ADICIONAR ESTA LINHA
-description = "Crie seu site em 5 minutos"
+[project]
+name = "simplyon"
 version = "1.0.0"
+description = "Gerador de sites para vendedores autônomos"
+requires-python = ">=3.9"
+dependencies = [
+    "flet>=0.25.0",
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+    "requests>=2.31.0",
+]
 
-[tool.flet.android]
+[tool.flet]
+org = "com.simplyon"
+product = "SimplyON"
+company = "SimplyON"
+copyright = "Copyright (C) 2025 SimplyON"
+project_name = "SimplyON"
+description = "Gerador de sites para vendedores autônomos"
+version = "1.0.0"
 icon = "assets/icone.png"
+splash = "assets/splash.png"
+
+[tool.flet.app]
+module = "painel"
+path = "."
+
+[tool.flet.android.manifest_application]
+usesCleartextTraffic = "true"
+allowBackup = "true"
+
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true
+"android.permission.ACCESS_NETWORK_STATE" = true
+"android.permission.ACCESS_WIFI_STATE" = true
+"android.permission.READ_EXTERNAL_STORAGE" = true
+"android.permission.WRITE_EXTERNAL_STORAGE" = true
+"android.permission.READ_MEDIA_IMAGES" = true
