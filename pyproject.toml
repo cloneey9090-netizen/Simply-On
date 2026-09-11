@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "Gerador de sites para vendedores autônomos"
 requires-python = ">=3.9"
 dependencies = [
-    "flet>=0.25.0",
+    "flet==0.25.0",
     "pandas>=2.0.0",
     "openpyxl>=3.1.0",
     "requests>=2.31.0",
