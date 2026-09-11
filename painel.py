@@ -755,7 +755,7 @@ def main(page: ft.Page):
         expand=True,
         image=ft.DecorationImage(
             src="assets/splash.png",
-            fit=ft.ImageFit.COVER,
+            fit=ft.BoxFit.COVER,
         ),
         content=ft.Column([
             ft.Container(expand=True),
