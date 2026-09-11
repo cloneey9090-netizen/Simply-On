@@ -760,7 +760,7 @@ def main(page: ft.Page):
                         border_radius=5,
                     ),
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.alignment.BOTTOM_CENTER,
+                alignment=ft.Alignment.BOTTOM_CENTER,
             ),
         ]),
     )
