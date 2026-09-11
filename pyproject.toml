@@ -19,11 +19,13 @@ project_name = "SimplyON"
 description = "Gerador de sites para vendedores autônomos"
 version = "1.0.0"
 icon = "assets/icone.png"
-splash = "assets/splash.png"
 
 [tool.flet.app]
 module = "painel"
 path = "."
+
+[tool.flet.splash]
+image = "assets/splash.png"
 
 [tool.flet.android.manifest_application]
 usesCleartextTraffic = "true"
