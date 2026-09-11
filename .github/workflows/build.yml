@@ -44,7 +44,7 @@ jobs:
 
       - name: Gerar APK com Flet
         run: |
-          flet build apk --verbose --no-interactive
+          flet build apk --verbose
 
       - name: Listar APK gerado
         run: |
