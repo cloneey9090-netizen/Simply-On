@@ -772,7 +772,7 @@ def main(page: ft.Page):
                         border_radius=5,
                     ),
                 ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.alignment.bottom_center,
+                alignment=ft.alignment.BOTTOM_CENTER,
             ),
         ]),
     )
