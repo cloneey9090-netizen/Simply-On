@@ -80,6 +80,7 @@ def iniciar_servidor_web():
     os.chdir(diretorio_atual)
     Handler = http.server.SimpleHTTPRequestHandler
 
+    # Silencia os logs do servidor para não poluir o console
     class SilentHandler(Handler):
         def log_message(self, format, *args):
             pass
@@ -102,7 +103,7 @@ def disparar_servidor_em_segundo_plano():
 
 
 # ============================================================
-# ===== TÚNEL CLOUDFLARE =====================================
+# ===== TÚNEL CLOUDFLARE (SUBSTITUI O PIKOTUNNEL) ============
 # ============================================================
 link_publico = ""
 tunel_ativo = False
@@ -110,6 +111,7 @@ processo_tunel = None
 
 
 def baixar_cloudflared():
+    """Baixa o binário do cloudflared conforme a plataforma."""
     global PASTA_BIN
     is_windows = sys.platform == "win32"
     is_android = "ANDROID_ROOT" in os.environ or "TERMUX" in os.environ
@@ -140,6 +142,11 @@ def baixar_cloudflared():
 
 
 def baixar_cloudflared_para_local():
+    """Obtém o cloudflared pronto para execução.
+
+    No Android: usa a pasta de cache interna do app (executável).
+    No PC: usa a pasta bin/ do projeto.
+    """
     cloudflared_path = baixar_cloudflared()
     if not cloudflared_path:
         return None
@@ -148,6 +155,7 @@ def baixar_cloudflared_para_local():
 
     if is_android:
         try:
+            # Tenta várias localizações válidas para Android
             possiveis = [
                 os.path.join(os.path.expanduser("~"), ".cache"),
                 os.path.join(tempfile.gettempdir(), "cloudflared_exec"),
@@ -162,6 +170,7 @@ def baixar_cloudflared_para_local():
                             or os.path.getsize(destino) != os.path.getsize(cloudflared_path)):
                         shutil.copy2(cloudflared_path, destino)
                     os.chmod(destino, 0o755)
+                    # Testa se realmente é executável
                     test = subprocess.run(
                         [destino, "--version"],
                         capture_output=True,
@@ -214,6 +223,7 @@ def iniciar_tunel_serveo(porta=8550):
 
 
 def iniciar_tunel_cloudflare():
+    """Inicia o túnel cloudflared. Funciona em PC e Android (via cache do app)."""
     global link_publico, tunel_ativo, processo_tunel
     try:
         cloudflared_path = baixar_cloudflared_para_local()
@@ -236,6 +246,7 @@ def iniciar_tunel_cloudflare():
                 bufsize=1,
             )
             time.sleep(5)
+            # Lê até 60 linhas procurando o link (30s max)
             for _ in range(60):
                 if processo_tunel.poll() is not None:
                     print("⚠️ cloudflared encerrou inesperadamente")
@@ -256,6 +267,7 @@ def iniciar_tunel_cloudflare():
     except Exception as e:
         print(f"❌ Erro no cloudflared: {e}")
 
+    # ===== FALLBACKS =====
     print("⚠️ Tentando túnel Pinggy como alternativa...")
     link, erro = iniciar_tunel_pinggy()
     if link:
@@ -738,35 +750,35 @@ def main(page: ft.Page):
     page.window.width = 480
     page.window.height = 720
 
-        # ===== TELA DE SPLASH =====
+    # ===== TELA DE SPLASH =====
     splash = ft.Container(
         expand=True,
-        bgcolor="#121212",
-        content=ft.Column(
-            controls=[
-                ft.Image(
-                    src="assets/splash.png",
-                    fit=ft.BoxFit.CONTAIN,
-                    expand=True,
-                ),
-                ft.Container(
-                    content=ft.Text(
-                        "Carregando...",
-                        size=16,
-                        color="white",
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    bgcolor="#00000066",
-                    padding=8,
-                    border_radius=5,
-                    margin=ft.Margin.only(bottom=20),   # ← Corrigido
-                ),
-            ],
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            alignment=ft.MainAxisAlignment.CENTER,
-            expand=True,
+        image=ft.DecorationImage(
+            src="assets/splash.png",
+            fit=ft.ImageFit.COVER,
         ),
+        content=ft.Column([
+            ft.Container(expand=True),
+            ft.Container(
+                content=ft.Column([
+                    ft.Container(
+                        content=ft.Text(
+                            "Carregando...",
+                            size=16,
+                            color="white",
+                        ),
+                        bgcolor="#00000066",
+                        padding=8,
+                        border_radius=5,
+                    ),
+                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                alignment=ft.alignment.bottom_center,
+            ),
+        ]),
     )
+
+    page.add(splash)
+    page.update()
 
     def on_keyboard(e: ft.KeyboardEvent):
         if e.key == "Back":
@@ -1397,6 +1409,9 @@ def main(page: ft.Page):
                 page.open(ft.SnackBar(content=ft.Text("✅ Link copiado!")))
                 page.update()
 
+        # ============================================================
+        # ===== COMPARTILHAR CATÁLOGO (AGORA SEM PIKOTUNNEL) ========
+        # ============================================================
         def abrir_site_local_click(e):
             global link_publico, tunel_ativo
             if not os.path.exists(ARQUIVO_HTML):
@@ -1404,11 +1419,14 @@ def main(page: ft.Page):
                 page.update()
                 return
 
+            # Sobe o servidor local primeiro
             disparar_servidor_em_segundo_plano()
 
+            # Avisa que está processando
             page.open(ft.SnackBar(content=ft.Text("⏳ Criando túnel público, aguarde...")))
             page.update()
 
+            # Roda o túnel em thread para não travar a UI
             def criar_tunel():
                 global link_publico, tunel_ativo
                 if not tunel_ativo:
@@ -1430,6 +1448,9 @@ def main(page: ft.Page):
             width=200
         )
 
+        # ============================================================
+        # ===== SALVAR CONFIG (COM TIMESTAMP NA LOGO E BANNERS) =====
+        # ============================================================
         def salvar_config(e):
             nonlocal config
             nonlocal caminho_logo_selecionada
@@ -1440,6 +1461,7 @@ def main(page: ft.Page):
             cor_selecionada = dropdown_cor.value
             logo_final = config.get("logo_url", "")
 
+            # ===== LOGO =====
             if caminho_logo_selecionada and os.path.exists(caminho_logo_selecionada):
                 try:
                     if not os.path.exists(PASTA_IMAGENS):
@@ -1449,6 +1471,7 @@ def main(page: ft.Page):
                     novo_nome = f"logo_{timestamp}{extensao}"
                     destino = os.path.join(PASTA_IMAGENS, novo_nome)
                     shutil.copy2(caminho_logo_selecionada, destino)
+                    # Remove a logo antiga
                     logo_antiga = config.get("logo_url", "")
                     if logo_antiga and "imagens/" in logo_antiga:
                         caminho_antigo = os.path.join(PASTA_ATUAL, logo_antiga)
@@ -1463,6 +1486,7 @@ def main(page: ft.Page):
                 except Exception as ex:
                     print(f"Erro ao copiar logo: {ex}")
 
+            # ===== BANNER 1 =====
             banner1_final = ""
             if caminho_banner1_selecionado and os.path.exists(caminho_banner1_selecionado):
                 try:
@@ -1479,6 +1503,7 @@ def main(page: ft.Page):
             else:
                 banner1_final = config.get("banners", [{"url": ""}])[0].get("url", "") if config.get("banners") else ""
 
+            # ===== BANNER 2 =====
             banner2_final = ""
             if caminho_banner2_selecionado and os.path.exists(caminho_banner2_selecionado):
                 try:
@@ -1495,6 +1520,7 @@ def main(page: ft.Page):
             else:
                 banner2_final = config.get("banners", [{"url": ""}, {"url": ""}])[1].get("url", "") if len(config.get("banners", [])) > 1 else ""
 
+            # ===== BANNER 3 =====
             banner3_final = ""
             if caminho_banner3_selecionado and os.path.exists(caminho_banner3_selecionado):
                 try:
@@ -1548,6 +1574,9 @@ def main(page: ft.Page):
             page.open(ft.SnackBar(content=ft.Text("✅ Configurações salvas e Site gerado!")))
             page.update()
 
+        # ============================================================
+        # ===== COLUNA HOSPEDAGEM ===================================
+        # ============================================================
         coluna_hospedagem = ft.Column([
             ft.Text("🌐 HOSPEDAGEM AUTOMÁTICA", weight=ft.FontWeight.BOLD, size=18),
             ft.Text("Configure seu token para hospedar sites com um clique", size=13, color="#888"),
@@ -1633,6 +1662,9 @@ def main(page: ft.Page):
             ft.ElevatedButton(content=ft.Text("💾 Salvar e Gerar Site"), on_click=salvar_config)
         ], scroll=ft.ScrollMode.AUTO)
 
+        # ============================================================
+        # ===== GERAR SITE COM OFERTA ===============================
+        # ============================================================
         def gerar_site_com_oferta(e):
             def continuar_geracao(e):
                 page.launch_url(LINK_DIRETO)
