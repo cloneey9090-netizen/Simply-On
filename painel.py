@@ -738,11 +738,10 @@ def main(page: ft.Page):
     page.window.width = 480
     page.window.height = 720
 
-    # ===== TELA DE SPLASH =====
         # ===== TELA DE SPLASH =====
     splash = ft.Container(
         expand=True,
-        bgcolor="#121212",  # cor de fundo neutra
+        bgcolor="#121212",
         content=ft.Column(
             controls=[
                 ft.Image(
@@ -760,7 +759,7 @@ def main(page: ft.Page):
                     bgcolor="#00000066",
                     padding=8,
                     border_radius=5,
-                    margin=ft.margin.only(bottom=20),
+                    margin=ft.Margin.only(bottom=20),   # ← Corrigido
                 ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -768,9 +767,6 @@ def main(page: ft.Page):
             expand=True,
         ),
     )
-
-    page.add(splash)
-    page.update()
 
     def on_keyboard(e: ft.KeyboardEvent):
         if e.key == "Back":
