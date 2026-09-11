@@ -18,68 +18,43 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Instalar dependências Python
+      - name: Debug - mostrar estrutura do projeto
         run: |
-          pip install -r requirements.txt
-
-      - name: Verificar pyproject.toml (debug)
-        run: |
+          echo "=== ARQUIVOS NA RAIZ ==="
+          ls -la
+          echo ""
           echo "=== CONTEÚDO DO pyproject.toml ==="
-          cat pyproject.toml || echo "⚠️ Arquivo não encontrado!"
+          cat pyproject.toml || echo "⚠️ pyproject.toml não encontrado!"
+          echo ""
           echo "=== ARQUIVOS NA PASTA ASSETS ==="
           ls -la assets/ || echo "⚠️ Pasta assets não encontrada!"
-          echo "=== FIM ==="
 
-      - name: Baixar e embutir cloudflared para assets do Android
+      - name: Instalar Flet e dependências
         run: |
-          mkdir -p assets/bin
-          curl -L --output assets/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64
-          chmod +x assets/bin/cloudflared
+          python -m pip install --upgrade pip
+          pip install flet
+          # Instala dependências declaradas no pyproject.toml
+          pip install -e .
 
-      - name: Setup Flutter (versão compatível)
+      - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
           channel: 'stable'
-          cache: false
-
-      - name: Criar pubspec.yaml e configurar ícone manualmente
-        run: |
-          # Cria o pubspec.yaml
-          cat > pubspec.yaml << EOF
-          name: simplyon
-          description: Crie seu site em 5 minutos
-          version: 1.0.0
-          environment:
-            sdk: ">=3.0.0 <4.0.0"
-          flutter:
-            uses-material-design: true
-            assets:
-              - assets/
-          EOF
-          
-          # Cria a estrutura de ícones do Android
-          mkdir -p android/app/src/main/res/mipmap-hdpi
-          mkdir -p android/app/src/main/res/mipmap-mdpi
-          mkdir -p android/app/src/main/res/mipmap-xhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          
-          # Copia o ícone para todas as resoluções
-          cp assets/icone.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          cp assets/icone.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
-          cp assets/icone.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          cp assets/icone.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          cp assets/icone.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          
-          echo "✅ Ícone copiado para todas as resoluções!"
+          cache: true
 
       - name: Gerar APK com Flet
         run: |
-          flet build apk --module-name painel
+          flet build apk --verbose
+
+      - name: Listar APK gerado
+        run: |
+          echo "=== ARQUIVOS GERADOS ==="
+          find build -name "*.apk" -type f
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: build/apk/
+          path: build/apk/*.apk
+          if-no-files-found: error
