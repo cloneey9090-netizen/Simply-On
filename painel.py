@@ -739,30 +739,34 @@ def main(page: ft.Page):
     page.window.height = 720
 
     # ===== TELA DE SPLASH =====
+        # ===== TELA DE SPLASH =====
     splash = ft.Container(
         expand=True,
-        image=ft.DecorationImage(
-            src="assets/splash.png",
-            fit=ft.BoxFit.COVER,
-        ),
-        content=ft.Column([
-            ft.Container(expand=True),
-            ft.Container(
-                content=ft.Column([
-                    ft.Container(
-                        content=ft.Text(
-                            "Carregando...",
-                            size=16,
-                            color="white",
-                        ),
-                        bgcolor="#00000066",
-                        padding=8,
-                        border_radius=5,
+        bgcolor="#121212",  # cor de fundo neutra
+        content=ft.Column(
+            controls=[
+                ft.Image(
+                    src="assets/splash.png",
+                    fit=ft.BoxFit.CONTAIN,
+                    expand=True,
+                ),
+                ft.Container(
+                    content=ft.Text(
+                        "Carregando...",
+                        size=16,
+                        color="white",
+                        text_align=ft.TextAlign.CENTER,
                     ),
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                alignment=ft.Alignment.BOTTOM_CENTER,
-            ),
-        ]),
+                    bgcolor="#00000066",
+                    padding=8,
+                    border_radius=5,
+                    margin=ft.margin.only(bottom=20),
+                ),
+            ],
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            alignment=ft.MainAxisAlignment.CENTER,
+            expand=True,
+        ),
     )
 
     page.add(splash)
