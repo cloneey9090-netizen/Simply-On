@@ -17,6 +17,441 @@ import sys
 import socket
 import tempfile
 import zipfile
+import io
+import paramiko
+import select
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("PyTunnel")
+
+
+# ============================================================
+# ===== CLASSE PyTunnel (TÚNEL REVERSO SSH) =================
+# ============================================================
+
+class PyTunnel:
+    """
+    Túnel reverso SSH com fallback entre múltiplos provedores.
+    Ordem: Pinggy → localhost.run → srv.us
+    """
+
+    PROVEDORES = [
+        {
+            "nome": "Pinggy",
+            "server": "free.pinggy.io",
+            "port": 443,
+            "user": "free",
+            "auth": "publickey",
+            "tipo_chave": "ed25519",
+            "porta_remota": 0,
+            "regex_url": r'https://[a-zA-Z0-9\-]+\.[a-zA-Z0-9\-\.]*(?:run\.pinggy-free\.link|free\.pinggy\.net|a\.pinggy\.link|pinggy\.online)',
+            "requer_shell": True,
+            "limite_min": 60,
+        },
+        {
+            "nome": "localhost.run",
+            "server": "localhost.run",
+            "port": 22,
+            "user": "nokey",
+            "auth": "none",
+            "tipo_chave": None,
+            "porta_remota": 0,
+            "regex_url": r'https://[a-zA-Z0-9\-]+\.lhr\.life',
+            "requer_shell": False,
+            "limite_min": 0,
+        },
+        {
+            "nome": "srv.us",
+            "server": "srv.us",
+            "port": 22,
+            "user": "",
+            "auth": "publickey",
+            "tipo_chave": "ed25519",
+            "porta_remota": 1,
+            "regex_url": r'https://[a-zA-Z0-9\-]+\.srv\.us',
+            "requer_shell": False,
+            "limite_min": 0,
+        },
+    ]
+
+    def __init__(self, local_host="127.0.0.1", local_port=8550,
+                 key_path=None, provedor_preferido=None):
+        self.local_host = local_host
+        self.local_port = local_port
+        self.key_path = key_path or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "tunnel_key"
+        )
+        self.provedor_preferido = provedor_preferido
+
+        self.ssh_client = None
+        self.transport = None
+        self.is_running = False
+        self.public_url = None
+        self._thread = None
+        self._channels = []
+        self.log_callback = None
+        self.status_callback = None
+
+        self.provedor_atual = None
+        self.inicio_conexao = None
+        self.tentativas_reconexao = 0
+        self.max_tentativas = 5
+
+    def set_log_callback(self, callback):
+        self.log_callback = callback
+
+    def set_status_callback(self, callback):
+        self.status_callback = callback
+
+    def _log(self, mensagem):
+        logger.info(mensagem)
+        if self.log_callback:
+            try:
+                self.log_callback(mensagem)
+            except:
+                pass
+
+    def _notificar_status(self, status, mensagem, detalhes=""):
+        if self.status_callback:
+            try:
+                self.status_callback(status, mensagem, detalhes)
+            except:
+                pass
+
+    def _load_or_generate_key(self, provedor):
+        tipo_chave = provedor.get("tipo_chave")
+        if not tipo_chave:
+            return None
+
+        caminho_chave = f"{self.key_path}_{tipo_chave}"
+
+        if os.path.exists(caminho_chave):
+            self._log(f"🔑 Carregando chave {tipo_chave.upper()}...")
+            try:
+                with open(caminho_chave, "r") as f:
+                    conteudo = f.read()
+                if tipo_chave == "rsa":
+                    return paramiko.RSAKey.from_private_key(io.StringIO(conteudo))
+                else:
+                    return paramiko.Ed25519Key.from_private_key(io.StringIO(conteudo))
+            except Exception as e:
+                self._log(f"⚠️ Chave corrompida, gerando nova")
+                try:
+                    os.remove(caminho_chave)
+                except:
+                    pass
+
+        self._log(f"🔑 Gerando nova chave {tipo_chave.upper()}...")
+
+        if tipo_chave == "rsa":
+            key = paramiko.RSAKey.generate(2048)
+            try:
+                key.write_private_key_file(caminho_chave)
+                self._log(f"✅ Chave RSA salva")
+            except Exception as e:
+                self._log(f"⚠️ Não salvou: {e}")
+            return key
+        else:
+            try:
+                from cryptography.hazmat.primitives.asymmetric import ed25519
+                from cryptography.hazmat.primitives import serialization
+
+                private_key = ed25519.Ed25519PrivateKey.generate()
+                private_bytes = private_key.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.OpenSSH,
+                    encryption_algorithm=serialization.NoEncryption(),
+                )
+                chave_str = private_bytes.decode("utf-8")
+
+                pasta = os.path.dirname(caminho_chave)
+                if pasta and not os.path.exists(pasta):
+                    os.makedirs(pasta, exist_ok=True)
+                with open(caminho_chave, "w") as f:
+                    f.write(chave_str)
+                self._log(f"✅ Chave Ed25519 salva")
+
+                return paramiko.Ed25519Key.from_private_key(io.StringIO(chave_str))
+            except Exception as e:
+                self._log(f"❌ Erro Ed25519: {e}")
+                key = paramiko.RSAKey.generate(2048)
+                return key
+
+    def _handler_conexao(self, chan):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.connect((self.local_host, self.local_port))
+        except Exception as e:
+            self._log(f"❌ Local falhou ({self.local_host}:{self.local_port}): {e}")
+            try:
+                chan.close()
+            except:
+                pass
+            return
+        try:
+            while self.is_running:
+                r, _, _ = select.select([sock, chan], [], [], 1.0)
+                if not self.is_running:
+                    break
+                if chan in r:
+                    data = chan.recv(4096)
+                    if not data:
+                        break
+                    sock.sendall(data)
+                if sock in r:
+                    data = sock.recv(4096)
+                    if not data:
+                        break
+                    chan.sendall(data)
+        except Exception:
+            pass
+        finally:
+            try:
+                chan.close()
+            except:
+                pass
+            try:
+                sock.close()
+            except:
+                pass
+
+    def _loop_aceitar(self):
+        self._log("🔄 Loop de escuta iniciado")
+        while self.is_running and self.transport and self.transport.is_active():
+            try:
+                chan = self.transport.accept(1)
+                if chan is None:
+                    continue
+                self._log(f"🌐 Requisição externa recebida!")
+                self._channels.append(chan)
+                threading.Thread(
+                    target=self._handler_conexao, args=(chan,), daemon=True
+                ).start()
+            except Exception:
+                if self.is_running:
+                    pass
+                break
+        self._log("🛑 Loop de escuta encerrado")
+
+    def _capturar_url_shell(self, provedor):
+        try:
+            shell = self.ssh_client.invoke_shell()
+            shell.settimeout(1.0)
+            dados = b""
+            inicio = time.time()
+            while time.time() - inicio < 12:
+                try:
+                    if shell.recv_ready():
+                        chunk = shell.recv(4096)
+                        if chunk:
+                            dados += chunk
+                            texto = dados.decode('utf-8', errors='ignore')
+                            texto_limpo = re.sub(
+                                r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', texto
+                            )
+                            matches = re.findall(provedor["regex_url"], texto_limpo)
+                            for m in matches:
+                                if "dashboard" not in m and len(m) > 15:
+                                    try:
+                                        shell.close()
+                                    except:
+                                        pass
+                                    return m.strip()
+                except socket.timeout:
+                    pass
+                time.sleep(0.3)
+            try:
+                shell.close()
+            except:
+                pass
+            return None
+        except Exception as e:
+            self._log(f"⚠️ Erro ao capturar URL via shell: {e}")
+            return None
+
+    def _capturar_url_channel(self, provedor):
+        try:
+            chan = self.transport.open_session()
+            chan.settimeout(2)
+            buffer = ""
+            inicio = time.time()
+            while time.time() - inicio < 15:
+                try:
+                    if chan.recv_ready():
+                        data = chan.recv(4096).decode('utf-8', errors='ignore')
+                        if data:
+                            buffer += data
+                            for linha in data.splitlines():
+                                if linha.strip():
+                                    self._log(f"   📥 {linha.strip()[:120]}")
+                            matches = re.findall(provedor["regex_url"], buffer)
+                            for m in matches:
+                                try:
+                                    chan.close()
+                                except:
+                                    pass
+                                return m.strip()
+                except socket.timeout:
+                    pass
+                except Exception:
+                    break
+                time.sleep(0.2)
+            try:
+                chan.close()
+            except:
+                pass
+            return None
+        except Exception as e:
+            self._log(f"⚠️ Erro ao capturar URL via channel: {e}")
+            return None
+
+    def _conectar_ssh(self, provedor, key):
+        common = {
+            "hostname": provedor["server"],
+            "port": provedor["port"],
+            "username": provedor["user"],
+            "look_for_keys": False,
+            "allow_agent": False,
+            "timeout": 45,
+            "banner_timeout": 45,
+            "auth_timeout": 45,
+        }
+
+        if provedor["auth"] == "none":
+            self._log("🔓 Usando autenticação NONE...")
+            try:
+                from paramiko.auth_strategy import NoneAuth
+                self.ssh_client.connect(auth_strategy=NoneAuth(""), **common)
+            except ImportError:
+                try:
+                    self.ssh_client.connect(**common)
+                except paramiko.SSHException:
+                    self.ssh_client.get_transport().auth_none(provedor["user"])
+        else:
+            self.ssh_client.connect(pkey=key, **common)
+
+    def _tentar_provedor(self, provedor, indice):
+        self._log(f"")
+        self._log(f"━━━ Tentando {provedor['nome']} ({indice+1}/{len(self.PROVEDORES)}) ━━━")
+        self._notificar_status("conectando", f"Conectando em {provedor['nome']}...")
+
+        try:
+            key = self._load_or_generate_key(provedor)
+
+            self.ssh_client = paramiko.SSHClient()
+            self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+            self._log(f"🌐 {provedor['server']}:{provedor['port']} (user: {provedor['user'] or 'vazio'})...")
+            self._conectar_ssh(provedor, key)
+            self._log(f"✅ SSH conectado!")
+
+            self.transport = self.ssh_client.get_transport()
+            self.transport.set_keepalive(30)
+
+            porta_remota = provedor.get("porta_remota", 0)
+            self._log(f"🔌 Solicitando porta remota {porta_remota}...")
+            self.transport.request_port_forward('', porta_remota)
+
+            self.is_running = True
+            self._thread = threading.Thread(target=self._loop_aceitar, daemon=True)
+            self._thread.start()
+
+            if provedor["requer_shell"]:
+                url = self._capturar_url_shell(provedor)
+            else:
+                url = self._capturar_url_channel(provedor)
+
+            if not url:
+                self._log(f"⚠️ {provedor['nome']} não retornou URL")
+                self._fechar_conexao()
+                return None
+
+            self.public_url = url
+            self.provedor_atual = provedor
+            self.inicio_conexao = time.time()
+            self.tentativas_reconexao = 0
+
+            self._log(f"🎉 Túnel ativo em {provedor['nome']}: {url}")
+            self._notificar_status(
+                "ativo",
+                f"✅ Túnel ativo via {provedor['nome']}",
+                url
+            )
+            return url
+
+        except Exception as e:
+            self._log(f"❌ {provedor['nome']} falhou: {type(e).__name__}: {e}")
+            self._fechar_conexao()
+            return None
+
+    def _fechar_conexao(self):
+        self.is_running = False
+        for chan in self._channels:
+            try:
+                chan.close()
+            except:
+                pass
+        self._channels.clear()
+        if self.transport:
+            try:
+                self.transport.close()
+            except:
+                pass
+            self.transport = None
+        if self.ssh_client:
+            try:
+                self.ssh_client.close()
+            except:
+                pass
+            self.ssh_client = None
+
+    def start(self):
+        if self.public_url and self.is_running:
+            return self.public_url
+
+        self.tentativas_reconexao = 0
+
+        if self.provedor_preferido is not None:
+            provedor = self.PROVEDORES[self.provedor_preferido]
+            self._log(f"🎯 Modo manual: testando apenas {provedor['nome']}")
+            url = self._tentar_provedor(provedor, self.provedor_preferido)
+            if url:
+                return url
+            return None
+
+        for i, provedor in enumerate(self.PROVEDORES):
+            url = self._tentar_provedor(provedor, i)
+            if url:
+                return url
+            time.sleep(2)
+
+        self._log("❌ Todos os provedores falharam")
+        self._notificar_status("erro", "❌ Nenhum provedor disponível")
+        return None
+
+    def stop(self):
+        self._log("🛑 Parando túnel...")
+        self._notificar_status("parado", "Túnel parado")
+        self.public_url = None
+        self._fechar_conexao()
+        self._log("✅ Parado")
+
+    def is_active(self):
+        return (self.is_running
+                and self.transport is not None
+                and self.transport.is_active())
+
+    def tempo_restante(self):
+        if not self.inicio_conexao or not self.provedor_atual:
+            return None
+        limite = self.provedor_atual.get("limite_min", 0)
+        if limite == 0:
+            return None
+        decorrido = time.time() - self.inicio_conexao
+        restante = (limite * 60) - decorrido
+        return max(0, int(restante))
+
 
 # ============================================================
 # ===== CONFIGURAÇÕES DE ANÚNCIOS ============================
@@ -74,19 +509,23 @@ def obter_ip_local():
         return "127.0.0.1"
 
 
+# ============================================================
+# ===== SERVIDOR WEB LOCAL (COM CORREÇÃO DO os.chdir) =======
+# ============================================================
+
+class HandlerComDiretorio(http.server.SimpleHTTPRequestHandler):
+    """Handler que SEMPRE serve do diretório correto, ignorando os.chdir()."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=PASTA_ATUAL, **kwargs)
+
+    def log_message(self, format, *args):
+        pass
+
+
 def iniciar_servidor_web():
     porta = 8550
-    diretorio_atual = os.path.dirname(os.path.abspath(__file__))
-    os.chdir(diretorio_atual)
-    Handler = http.server.SimpleHTTPRequestHandler
-
-    # Silencia os logs do servidor para não poluir o console
-    class SilentHandler(Handler):
-        def log_message(self, format, *args):
-            pass
-
     try:
-        with socketserver.ThreadingTCPServer(("0.0.0.0", porta), SilentHandler) as httpd:
+        with socketserver.ThreadingTCPServer(("0.0.0.0", porta), HandlerComDiretorio) as httpd:
             print(f"🌐 Servidor rodando na porta {porta}")
             print(f"📱 Acesse: http://{obter_endereco_servidor()}:{porta}")
             ip_local = obter_ip_local()
@@ -103,198 +542,47 @@ def disparar_servidor_em_segundo_plano():
 
 
 # ============================================================
-# ===== TÚNEL CLOUDFLARE (SUBSTITUI O PIKOTUNNEL) ============
+# ===== TÚNEL PYTUNNEL =======================================
 # ============================================================
 link_publico = ""
 tunel_ativo = False
-processo_tunel = None
+pytunnel_instance = None
 
 
-def baixar_cloudflared():
-    """Baixa o binário do cloudflared conforme a plataforma."""
-    global PASTA_BIN
-    is_windows = sys.platform == "win32"
-    is_android = "ANDROID_ROOT" in os.environ or "TERMUX" in os.environ
-
-    if is_windows:
-        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared.exe")
-        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
-    elif is_android:
-        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
-        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
-    else:
-        cloudflared_path = os.path.join(PASTA_BIN, "cloudflared")
-        url = "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
-
-    if os.path.exists(cloudflared_path) and os.path.getsize(cloudflared_path) > 1000000:
-        return cloudflared_path
+def iniciar_tunel_pytunnel(porta=8550):
+    """Inicia o túnel PyTunnel. Retorna (mensagem, url_publica)."""
+    global link_publico, tunel_ativo, pytunnel_instance
 
     try:
-        print(f"📥 Baixando cloudflared de: {url}")
-        urllib.request.urlretrieve(url, cloudflared_path)
-        if not is_windows:
-            os.chmod(cloudflared_path, 0o755)
-        print(f"✅ cloudflared baixado com sucesso: {cloudflared_path}")
-        return cloudflared_path
-    except Exception as e:
-        print(f"❌ Erro ao baixar cloudflared: {e}")
-        return None
+        pytunnel_instance = PyTunnel(
+            local_host="127.0.0.1",
+            local_port=porta,
+        )
 
+        def log_cb(msg):
+            print(f"[PyTunnel] {msg}")
 
-def baixar_cloudflared_para_local():
-    """Obtém o cloudflared pronto para execução.
+        pytunnel_instance.set_log_callback(log_cb)
 
-    No Android: usa a pasta de cache interna do app (executável).
-    No PC: usa a pasta bin/ do projeto.
-    """
-    cloudflared_path = baixar_cloudflared()
-    if not cloudflared_path:
-        return None
+        url = pytunnel_instance.start()
 
-    is_android = 'ANDROID_ROOT' in os.environ or 'TERMUX' in os.environ
-
-    if is_android:
-        try:
-            # Tenta várias localizações válidas para Android
-            possiveis = [
-                os.path.join(os.path.expanduser("~"), ".cache"),
-                os.path.join(tempfile.gettempdir(), "cloudflared_exec"),
-                "/data/local/tmp",
-            ]
-            for pasta in possiveis:
-                try:
-                    if not os.path.exists(pasta):
-                        os.makedirs(pasta, exist_ok=True)
-                    destino = os.path.join(pasta, "cloudflared")
-                    if (not os.path.exists(destino)
-                            or os.path.getsize(destino) != os.path.getsize(cloudflared_path)):
-                        shutil.copy2(cloudflared_path, destino)
-                    os.chmod(destino, 0o755)
-                    # Testa se realmente é executável
-                    test = subprocess.run(
-                        [destino, "--version"],
-                        capture_output=True,
-                        timeout=8,
-                    )
-                    if test.returncode == 0:
-                        print(f"✅ cloudflared executável em: {destino}")
-                        return destino
-                except Exception as e:
-                    print(f"⚠️ Falha em {pasta}: {e}")
-                    continue
-            print("❌ Nenhuma pasta executável encontrada no Android")
-            return None
-        except Exception as e:
-            print(f"❌ Erro ao preparar cloudflared no Android: {e}")
-            return None
-    else:
-        try:
-            os.chmod(cloudflared_path, 0o755)
-            return cloudflared_path
-        except Exception as e:
-            print(f"❌ Erro ao tornar cloudflared executável: {e}")
-            return None
-
-
-def iniciar_tunel_pinggy(porta=8550):
-    try:
-        url = "https://pinggy.io/api/tunnels"
-        data = {"port": porta}
-        response = requests.post(url, json=data, timeout=15)
-        if response.status_code == 200:
-            result = response.json()
-            if "public_url" in result:
-                return result["public_url"], None
-        return None, "Falha ao criar túnel Pinggy"
-    except Exception as e:
-        return None, str(e)
-
-
-def iniciar_tunel_serveo(porta=8550):
-    try:
-        response = requests.post("https://serveo.net", data={"port": porta}, timeout=20)
-        if response.status_code == 200:
-            match = re.search(r'https://[a-zA-Z0-9-]+\.serveo\.net', response.text)
-            if match:
-                return match.group(), None
-        return None, "Falha ao obter link do Serveo"
-    except Exception as e:
-        return None, str(e)
-
-
-def iniciar_tunel_cloudflare():
-    """Inicia o túnel cloudflared. Funciona em PC e Android (via cache do app)."""
-    global link_publico, tunel_ativo, processo_tunel
-    try:
-        cloudflared_path = baixar_cloudflared_para_local()
-        if not cloudflared_path or not os.path.exists(cloudflared_path):
-            print("⚠️ cloudflared indisponível, tentando fallbacks...")
+        if url:
+            link_publico = url
+            tunel_ativo = True
+            return f"✅ Túnel ativo! Link: {url}"
         else:
-            os.chmod(cloudflared_path, 0o755)
-            comando = [
-                cloudflared_path,
-                "tunnel",
-                "--url", "http://127.0.0.1:8550",
-                "--no-autoupdate",
-            ]
-            print(f"▶️ Executando: {' '.join(comando)}")
-            processo_tunel = subprocess.Popen(
-                comando,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-            )
-            time.sleep(5)
-            # Lê até 60 linhas procurando o link (30s max)
-            for _ in range(60):
-                if processo_tunel.poll() is not None:
-                    print("⚠️ cloudflared encerrou inesperadamente")
-                    break
-                line = processo_tunel.stdout.readline() if processo_tunel.stdout else ""
-                if not line:
-                    time.sleep(0.5)
-                    continue
-                print(f"[cloudflared] {line.strip()}")
-                if "trycloudflare.com" in line:
-                    match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
-                    if match:
-                        link_publico = match.group()
-                        tunel_ativo = True
-                        return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
-            if tunel_ativo and link_publico:
-                return f"✅ Túnel Cloudflare ativo! Link: {link_publico}"
+            return "❌ Todos os provedores falharam"
+
     except Exception as e:
-        print(f"❌ Erro no cloudflared: {e}")
-
-    # ===== FALLBACKS =====
-    print("⚠️ Tentando túnel Pinggy como alternativa...")
-    link, erro = iniciar_tunel_pinggy()
-    if link:
-        link_publico = link
-        tunel_ativo = True
-        return f"✅ Túnel Pinggy ativo! Link: {link}"
-
-    print("⚠️ Tentando túnel Serveo como alternativa...")
-    link, erro = iniciar_tunel_serveo()
-    if link:
-        link_publico = link
-        tunel_ativo = True
-        return f"✅ Túnel Serveo ativo! Link: {link}"
-
-    print("⚠️ Usando link local (rede Wi-Fi)")
-    ip = obter_ip_local()
-    link_publico = f"http://{ip}:8550"
-    tunel_ativo = True
-    return f"✅ Link local (rede Wi-Fi): {link_publico}"
+        return f"❌ Erro no PyTunnel: {e}"
 
 
 def parar_tunel():
-    global tunel_ativo, processo_tunel, link_publico
+    global tunel_ativo, link_publico, pytunnel_instance
     try:
-        if processo_tunel:
-            processo_tunel.terminate()
-            processo_tunel = None
+        if pytunnel_instance:
+            pytunnel_instance.stop()
+            pytunnel_instance = None
         tunel_ativo = False
         link_publico = ""
     except Exception as e:
@@ -750,7 +1038,6 @@ def main(page: ft.Page):
     page.window.width = 480
     page.window.height = 720
 
-    # ===== TELA DE SPLASH =====
     splash = ft.Container(
         expand=True,
         image=ft.DecorationImage(
@@ -762,11 +1049,7 @@ def main(page: ft.Page):
             ft.Container(
                 content=ft.Column([
                     ft.Container(
-                        content=ft.Text(
-                            "Carregando...",
-                            size=16,
-                            color="white",
-                        ),
+                        content=ft.Text("Carregando...", size=16, color="white"),
                         bgcolor="#00000066",
                         padding=8,
                         border_radius=5,
@@ -960,23 +1243,12 @@ def main(page: ft.Page):
         }
 
         nicho_opcoes = [
-            "🏍️ Peças de Moto Usada",
-            "🐶 PetShop / Animais",
-            "🚲 Bicicletas / Bike",
-            "📱 Eletrônicos / Celulares",
-            "👗 Moda / Roupas",
-            "🛋️ Móveis / Decoração",
-            "🍔 Alimentação / Mercado",
-            "🛍️ Loja de Variedades",
-            "💄 Beleza e Estética",
-            "🏋️ Academia e Esportes",
-            "📚 Livros e Papelaria",
-            "🎸 Instrumentos Musicais",
-            "🧸 Brinquedos e Infantil",
-            "🌿 Jardinagem e Paisagismo",
-            "🔧 Ferramentas e Construção",
-            "🎮 Games e Informática",
-            "🚗 Automóveis e Peças"
+            "🏍️ Peças de Moto Usada", "🐶 PetShop / Animais", "🚲 Bicicletas / Bike",
+            "📱 Eletrônicos / Celulares", "👗 Moda / Roupas", "🛋️ Móveis / Decoração",
+            "🍔 Alimentação / Mercado", "🛍️ Loja de Variedades", "💄 Beleza e Estética",
+            "🏋️ Academia e Esportes", "📚 Livros e Papelaria", "🎸 Instrumentos Musicais",
+            "🧸 Brinquedos e Infantil", "🌿 Jardinagem e Paisagismo",
+            "🔧 Ferramentas e Construção", "🎮 Games e Informática", "🚗 Automóveis e Peças"
         ]
 
         dropdown_nicho = ft.Dropdown(
@@ -1093,15 +1365,13 @@ def main(page: ft.Page):
                     if col_imagem and pd.notna(row[col_imagem]):
                         imagem_url = str(row[col_imagem])
                     item = {
-                        "id": proximo_id,
-                        "nome": nome_val,
+                        "id": proximo_id, "nome": nome_val,
                         "modelo": str(row[col_modelo]) if col_modelo and pd.notna(row[col_modelo]) else "Padrão",
                         "categoria": str(row[col_categoria]) if col_categoria and pd.notna(row[col_categoria]) else "Geral",
                         "status": "Disponível",
                         "preco": str(row[col_preco]) if pd.notna(row[col_preco]) else "R$ 0,00",
                         "descricao": str(row[col_desc]) if col_desc and pd.notna(row[col_desc]) else "",
-                        "imagem": imagem_url,
-                        "destaque": False
+                        "imagem": imagem_url, "destaque": False
                     }
                     estoque.append(item)
                     proximo_id += 1
@@ -1167,7 +1437,7 @@ def main(page: ft.Page):
                     if response.status_code in [200, 201]:
                         site_id = response.json()["id"]
                     else:
-                        return None, f"Erro ao criar site (Tente outro nome): {response.status_code} - {response.text}"
+                        return None, f"Erro ao criar site: {response.status_code}"
                 if not site_id:
                     return None, "Não foi possível obter o site_id."
                 index_path = os.path.join(pasta_do_site, "index.html")
@@ -1191,7 +1461,7 @@ def main(page: ft.Page):
                 if os.path.exists(zip_path):
                     os.remove(zip_path)
                 if response.status_code not in [200, 201, 202]:
-                    return None, f"Erro no deploy: {response.status_code} - {response.text}"
+                    return None, f"Erro no deploy: {response.status_code}"
                 deploy_data = response.json()
                 url = deploy_data.get("ssl_url") or deploy_data.get("url")
                 if not url:
@@ -1409,9 +1679,6 @@ def main(page: ft.Page):
                 page.open(ft.SnackBar(content=ft.Text("✅ Link copiado!")))
                 page.update()
 
-        # ============================================================
-        # ===== COMPARTILHAR CATÁLOGO (AGORA SEM PIKOTUNNEL) ========
-        # ============================================================
         def abrir_site_local_click(e):
             global link_publico, tunel_ativo
             if not os.path.exists(ARQUIVO_HTML):
@@ -1419,18 +1686,17 @@ def main(page: ft.Page):
                 page.update()
                 return
 
-            # Sobe o servidor local primeiro
             disparar_servidor_em_segundo_plano()
 
-            # Avisa que está processando
             page.open(ft.SnackBar(content=ft.Text("⏳ Criando túnel público, aguarde...")))
             page.update()
 
-            # Roda o túnel em thread para não travar a UI
             def criar_tunel():
                 global link_publico, tunel_ativo
                 if not tunel_ativo:
-                    iniciar_tunel_cloudflare()
+                    mensagem = iniciar_tunel_pytunnel(8550)
+                    page.open(ft.SnackBar(content=ft.Text(mensagem)))
+                    page.update()
                 if tunel_ativo and link_publico:
                     mostrar_link(link_publico)
                 else:
@@ -1448,9 +1714,6 @@ def main(page: ft.Page):
             width=200
         )
 
-        # ============================================================
-        # ===== SALVAR CONFIG (COM TIMESTAMP NA LOGO E BANNERS) =====
-        # ============================================================
         def salvar_config(e):
             nonlocal config
             nonlocal caminho_logo_selecionada
@@ -1461,7 +1724,6 @@ def main(page: ft.Page):
             cor_selecionada = dropdown_cor.value
             logo_final = config.get("logo_url", "")
 
-            # ===== LOGO =====
             if caminho_logo_selecionada and os.path.exists(caminho_logo_selecionada):
                 try:
                     if not os.path.exists(PASTA_IMAGENS):
@@ -1471,7 +1733,6 @@ def main(page: ft.Page):
                     novo_nome = f"logo_{timestamp}{extensao}"
                     destino = os.path.join(PASTA_IMAGENS, novo_nome)
                     shutil.copy2(caminho_logo_selecionada, destino)
-                    # Remove a logo antiga
                     logo_antiga = config.get("logo_url", "")
                     if logo_antiga and "imagens/" in logo_antiga:
                         caminho_antigo = os.path.join(PASTA_ATUAL, logo_antiga)
@@ -1486,7 +1747,6 @@ def main(page: ft.Page):
                 except Exception as ex:
                     print(f"Erro ao copiar logo: {ex}")
 
-            # ===== BANNER 1 =====
             banner1_final = ""
             if caminho_banner1_selecionado and os.path.exists(caminho_banner1_selecionado):
                 try:
@@ -1503,7 +1763,6 @@ def main(page: ft.Page):
             else:
                 banner1_final = config.get("banners", [{"url": ""}])[0].get("url", "") if config.get("banners") else ""
 
-            # ===== BANNER 2 =====
             banner2_final = ""
             if caminho_banner2_selecionado and os.path.exists(caminho_banner2_selecionado):
                 try:
@@ -1520,7 +1779,6 @@ def main(page: ft.Page):
             else:
                 banner2_final = config.get("banners", [{"url": ""}, {"url": ""}])[1].get("url", "") if len(config.get("banners", [])) > 1 else ""
 
-            # ===== BANNER 3 =====
             banner3_final = ""
             if caminho_banner3_selecionado and os.path.exists(caminho_banner3_selecionado):
                 try:
@@ -1574,9 +1832,6 @@ def main(page: ft.Page):
             page.open(ft.SnackBar(content=ft.Text("✅ Configurações salvas e Site gerado!")))
             page.update()
 
-        # ============================================================
-        # ===== COLUNA HOSPEDAGEM ===================================
-        # ============================================================
         coluna_hospedagem = ft.Column([
             ft.Text("🌐 HOSPEDAGEM AUTOMÁTICA", weight=ft.FontWeight.BOLD, size=18),
             ft.Text("Configure seu token para hospedar sites com um clique", size=13, color="#888"),
@@ -1662,9 +1917,6 @@ def main(page: ft.Page):
             ft.ElevatedButton(content=ft.Text("💾 Salvar e Gerar Site"), on_click=salvar_config)
         ], scroll=ft.ScrollMode.AUTO)
 
-        # ============================================================
-        # ===== GERAR SITE COM OFERTA ===============================
-        # ============================================================
         def gerar_site_com_oferta(e):
             def continuar_geracao(e):
                 page.launch_url(LINK_DIRETO)
