@@ -762,25 +762,22 @@ def gerar_arquivo_site(nova_config):
 
         anuncio_html = f"""
     <div style="max-width:1100px; margin:20px auto; padding:0 15px; text-align:center;">
-        <!-- ===== BANNER ADSTERRA 300x250 ===== -->
-        <div style="display:flex; justify-content:center; margin:15px 0;">
+        <!-- ===== BANNER ADSTERRA 320x50 (mobile) ===== -->
+        <div style="display:flex; justify-content:center; margin:10px 0;">
             <script type="text/javascript">
               atOptions = {{
-                'key' : '4a36de81eb4d0734e3725b0c103092a0',
+                'key' : 'c3dded2300d31f575aac2d9d189cfe03',
                 'format' : 'iframe',
-                'height' : 250,
-                'width' : 300,
+                'height' : 50,
+                'width' : 320,
                 'params' : {{}}
               }};
             </script>
-            <script type="text/javascript" src="https://www.highrevenueformat.com/4a36de81eb4d0734e3725b0c103092a0/invoke.js"></script>
+            <script type="text/javascript" src="https://www.highrevenueformat.com/c3dded2300d31f575aac2d9d189cfe03/invoke.js"></script>
         </div>
 
         <p style="color:#888; font-size:11px; margin-top:8px;">Apoie o projeto SimplyON</p>
     </div>
-
-        <!-- ===== SOCIAL BAR ADSTERRA (flutua na tela) ===== -->
-    
     """
 
 
