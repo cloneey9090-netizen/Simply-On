@@ -79,9 +79,12 @@ class PyTunnel:
                  key_path=None, provedor_preferido=None):
         self.local_host = local_host
         self.local_port = local_port
-        self.key_path = key_path or os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "tunnel_key"
-        )
+        # ✅ CORRIGIDO: chave SSH fica na pasta persistente do app
+        if key_path is None:
+            pasta_persistente = os.getenv("FLET_APP_STORAGE_DATA") \
+                or os.path.dirname(os.path.abspath(__file__))
+            key_path = os.path.join(pasta_persistente, "tunnel_key")
+        self.key_path = key_path
         self.provedor_preferido = provedor_preferido
 
         self.ssh_client = None
@@ -460,49 +463,62 @@ class PyTunnel:
 LINK_DIRETO = "https://www.profitableratecpmnetwork.com/ih67c0tk?key=0fbe6afc2bc12224f11e10c034716ffb"
 
 # ============================================================
-# ===== CONFIGURAÇÕES DE PASTAS ==============================
+# ===== CONFIGURAÇÕES DE PASTAS (PERSISTENTE NO ANDROID) =====
 # ============================================================
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 
+
 def obter_pasta_dados():
-    """Retorna a pasta de dados persistente do app.
-    No Android, usa FLET_APP_STORAGE_DATA (pasta privada, durável).
-    No PC, usa a pasta do projeto.
     """
-    if 'ANDROID_ROOT' in os.environ:
-        # Tenta usar a pasta de dados do Flet (persistente no Android)
-        pasta_flet = os.environ.get("FLET_APP_STORAGE_DATA")
-        if pasta_flet:
-            try:
-                if not os.path.exists(pasta_flet):
-                    os.makedirs(pasta_flet, exist_ok=True)
-                # Testa se pode escrever
-                teste = os.path.join(pasta_flet, ".teste")
-                with open(teste, "w") as f:
-                    f.write("ok")
-                os.remove(teste)
-                print(f"✅ Usando FLET_APP_STORAGE_DATA: {pasta_flet}")
-                return pasta_flet
-            except Exception as e:
-                print(f"⚠️ Erro em FLET_APP_STORAGE_DATA: {e}")
+    Retorna uma pasta PERSISTENTE para salvar os dados do SimplyON.
 
-        # Fallback 1: pasta de suporte do app
-        try:
-            pasta = os.path.expanduser("~")
-            if pasta and pasta != "/":
-                print(f"⚠️ Fallback (home): {pasta}")
-                return pasta
-        except:
-            pass
+    - No Android (APK): usa FLET_APP_STORAGE_DATA — pasta de dados do app.
+      Só é apagada se o usuário DESINSTALAR. Sobrevive a:
+        * botão "quadrado" (recentes)
+        * app morto pelo sistema
+        * reinicialização do celular
 
-        # Fallback 2: pasta do app (último recurso)
-        print(f"⚠️ Fallback final: {PASTA_ATUAL}")
+    - No PC (VSCode): FLET_APP_STORAGE_DATA geralmente não existe,
+      então cai pra pasta do script (PASTA_ATUAL).
+    """
+    # 1ª tentativa: variável oficial do Flet
+    pasta = os.getenv("FLET_APP_STORAGE_DATA")
+
+    # 2ª tentativa: variável de compatibilidade
+    if not pasta:
+        pasta = os.getenv("FLET_APP_PATH")
+
+    # 3ª tentativa: fallback PC/VSCode
+    if not pasta:
+        pasta = PASTA_ATUAL
+
+    # Garante que existe e é gravável
+    try:
+        os.makedirs(pasta, exist_ok=True)
+        teste = os.path.join(pasta, ".teste_escrita")
+        with open(teste, "w") as f:
+            f.write("ok")
+        os.remove(teste)
+        return pasta
+    except Exception as e:
+        print(f"⚠️ Falha ao usar {pasta}: {e}. Caindo pra PASTA_ATUAL.")
         return PASTA_ATUAL
-    else:
-        return PASTA_ATUAL
+
 
 PASTA_DADOS = obter_pasta_dados()
 print(f"📁 Pasta de dados: {PASTA_DADOS}")
+
+# Log de diagnóstico — grava num arquivo pra você ver o que rolou no Android
+try:
+    with open(os.path.join(PASTA_DADOS, "_debug_pasta.txt"), "a", encoding="utf-8") as _f:
+        _f.write(f"[BOOT] PASTA_ATUAL={PASTA_ATUAL}\n")
+        _f.write(f"[BOOT] FLET_APP_STORAGE_DATA={os.getenv('FLET_APP_STORAGE_DATA')}\n")
+        _f.write(f"[BOOT] FLET_APP_PATH={os.getenv('FLET_APP_PATH')}\n")
+        _f.write(f"[BOOT] PASTA_DADOS={PASTA_DADOS}\n")
+        _f.write(f"[BOOT] Android? {'ANDROID_ROOT' in os.environ}\n")
+        _f.write("-" * 40 + "\n")
+except Exception as _e:
+    print(f"⚠️ Não foi possível gravar _debug_pasta.txt: {_e}")
 
 ARQUIVO_JSON = os.path.join(PASTA_DADOS, "estoque.json")
 ARQUIVO_CONFIG = os.path.join(PASTA_DADOS, "config.json")
@@ -511,10 +527,8 @@ ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_DADOS, "upload_config.json")
 PASTA_IMAGENS = os.path.join(PASTA_DADOS, "imagens")
 PASTA_BIN = os.path.join(PASTA_DADOS, "bin")
 
-if not os.path.exists(PASTA_IMAGENS):
-    os.makedirs(PASTA_IMAGENS)
-if not os.path.exists(PASTA_BIN):
-    os.makedirs(PASTA_BIN)
+os.makedirs(PASTA_IMAGENS, exist_ok=True)
+os.makedirs(PASTA_BIN, exist_ok=True)
 
 
 def carregar_json(arquivo, padrao):
@@ -551,13 +565,13 @@ def obter_ip_local():
 
 
 # ============================================================
-# ===== SERVIDOR WEB LOCAL (COM CORREÇÃO DO os.chdir) =======
+# ===== SERVIDOR WEB LOCAL ===================================
 # ============================================================
 
 class HandlerComDiretorio(http.server.SimpleHTTPRequestHandler):
-    """Handler que SEMPRE serve do diretório correto, ignorando os.chdir()."""
+    """Handler que SEMPRE serve da PASTA_DADOS (onde o index.html é gerado)."""
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=PASTA_ATUAL, **kwargs)
+        super().__init__(*args, directory=PASTA_DADOS, **kwargs)
 
     def log_message(self, format, *args):
         pass
@@ -591,13 +605,15 @@ pytunnel_instance = None
 
 
 def iniciar_tunel_pytunnel(porta=8550):
-    """Inicia o túnel PyTunnel. Retorna (mensagem, url_publica)."""
+    """Inicia o túnel PyTunnel. Retorna mensagem com o link ou erro."""
     global link_publico, tunel_ativo, pytunnel_instance
 
     try:
         pytunnel_instance = PyTunnel(
             local_host="127.0.0.1",
             local_port=porta,
+            # ✅ CORRIGIDO: chave SSH persistente
+            key_path=os.path.join(PASTA_DADOS, "tunnel_key"),
         )
 
         def log_cb(msg):
@@ -801,9 +817,8 @@ def gerar_arquivo_site(nova_config):
         active = "active" if i == 0 else ""
         carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
 
-        anuncio_html = f"""
+    anuncio_html = f"""
     <div style="max-width:1100px; margin:20px auto; padding:0 15px; text-align:center;">
-        <!-- ===== BANNER ADSTERRA 320x50 (mobile) ===== -->
         <div style="display:flex; justify-content:center; margin:10px 0;">
             <script type="text/javascript">
               atOptions = {{
@@ -817,7 +832,6 @@ def gerar_arquivo_site(nova_config):
             <script type="text/javascript" src="https://www.highrevenueformat.com/c3dded2300d31f575aac2d9d189cfe03/invoke.js"></script>
         </div>
 
-        <!-- ===== LINK DIRETO (FALLBACK) ===== -->
         <a href="{LINK_DIRETO}" target="_blank" 
            style="display:inline-block; background:linear-gradient(135deg,#ff5722,#ff9800); 
                   color:white; padding:12px 25px; border-radius:50px; 
@@ -1674,7 +1688,8 @@ def main(page: ft.Page):
             page.update()
             if servico == "Netlify":
                 site_name = config_upload.get("site_name", "meu-site")
-                url, erro = hospedar_netlify(PASTA_ATUAL, token, site_name)
+                # ✅ CORRIGIDO: usar PASTA_DADOS
+                url, erro = hospedar_netlify(PASTA_DADOS, token, site_name)
             else:
                 repo = config_upload.get("github_repo", "")
                 if not repo:
@@ -1682,7 +1697,8 @@ def main(page: ft.Page):
                     txt_status_hospedagem.color = "#ff5722"
                     page.update()
                     return
-                url, erro = hospedar_github(PASTA_ATUAL, token, repo)
+                # ✅ CORRIGIDO: usar PASTA_DADOS
+                url, erro = hospedar_github(PASTA_DADOS, token, repo)
             if url:
                 txt_status_hospedagem.value = f"✅ Site hospedado: {url}"
                 txt_status_hospedagem.color = "#4caf50"
@@ -1790,7 +1806,7 @@ def main(page: ft.Page):
                     shutil.copy2(caminho_logo_selecionada, destino)
                     logo_antiga = config.get("logo_url", "")
                     if logo_antiga and "imagens/" in logo_antiga:
-                        caminho_antigo = os.path.join(PASTA_ATUAL, logo_antiga)
+                        caminho_antigo = os.path.join(PASTA_DADOS, logo_antiga)
                         if os.path.exists(caminho_antigo) and caminho_antigo != destino:
                             try:
                                 os.remove(caminho_antigo)
