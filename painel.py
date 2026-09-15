@@ -465,31 +465,39 @@ LINK_DIRETO = "https://www.profitableratecpmnetwork.com/ih67c0tk?key=0fbe6afc2bc
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
 
 def obter_pasta_dados():
-    """Retorna uma pasta persistente para salvar dados do app.
-    No Android, usa a pasta de dados do app (não é limpa pelo sistema).
+    """Retorna a pasta de dados persistente do app.
+    No Android, usa FLET_APP_STORAGE_DATA (pasta privada, durável).
     No PC, usa a pasta do projeto.
     """
     if 'ANDROID_ROOT' in os.environ:
-        # Android: pasta de dados do app (persistente)
+        # Tenta usar a pasta de dados do Flet (persistente no Android)
+        pasta_flet = os.environ.get("FLET_APP_STORAGE_DATA")
+        if pasta_flet:
+            try:
+                if not os.path.exists(pasta_flet):
+                    os.makedirs(pasta_flet, exist_ok=True)
+                # Testa se pode escrever
+                teste = os.path.join(pasta_flet, ".teste")
+                with open(teste, "w") as f:
+                    f.write("ok")
+                os.remove(teste)
+                print(f"✅ Usando FLET_APP_STORAGE_DATA: {pasta_flet}")
+                return pasta_flet
+            except Exception as e:
+                print(f"⚠️ Erro em FLET_APP_STORAGE_DATA: {e}")
+
+        # Fallback 1: pasta de suporte do app
         try:
-            # Tenta usar a pasta padrão de dados
             pasta = os.path.expanduser("~")
-            if not pasta or pasta == "/":
-                # Fallback: pasta de arquivos do app
-                pasta = "/data/data/com.simplyon/files"
-            # Se não existir, tenta criar
-            if not os.path.exists(pasta):
-                os.makedirs(pasta, exist_ok=True)
-            # Testa se pode escrever
-            teste = os.path.join(pasta, ".teste")
-            with open(teste, "w") as f:
-                f.write("ok")
-            os.remove(teste)
-            return pasta
-        except Exception as e:
-            print(f"⚠️ Erro ao acessar pasta de dados: {e}")
-            # Fallback: pasta do app
-            return PASTA_ATUAL
+            if pasta and pasta != "/":
+                print(f"⚠️ Fallback (home): {pasta}")
+                return pasta
+        except:
+            pass
+
+        # Fallback 2: pasta do app (último recurso)
+        print(f"⚠️ Fallback final: {PASTA_ATUAL}")
+        return PASTA_ATUAL
     else:
         return PASTA_ATUAL
 
@@ -2041,4 +2049,3 @@ def main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.app(target=main)
-
