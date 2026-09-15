@@ -463,12 +463,45 @@ LINK_DIRETO = "https://www.profitableratecpmnetwork.com/ih67c0tk?key=0fbe6afc2bc
 # ===== CONFIGURAÇÕES DE PASTAS ==============================
 # ============================================================
 PASTA_ATUAL = os.path.dirname(os.path.abspath(__file__))
-ARQUIVO_JSON = os.path.join(PASTA_ATUAL, "estoque.json")
-ARQUIVO_CONFIG = os.path.join(PASTA_ATUAL, "config.json")
-ARQUIVO_HTML = os.path.join(PASTA_ATUAL, "index.html")
-ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_ATUAL, "upload_config.json")
-PASTA_IMAGENS = os.path.join(PASTA_ATUAL, "imagens")
-PASTA_BIN = os.path.join(PASTA_ATUAL, "bin")
+
+def obter_pasta_dados():
+    """Retorna uma pasta persistente para salvar dados do app.
+    No Android, usa a pasta de dados do app (não é limpa pelo sistema).
+    No PC, usa a pasta do projeto.
+    """
+    if 'ANDROID_ROOT' in os.environ:
+        # Android: pasta de dados do app (persistente)
+        try:
+            # Tenta usar a pasta padrão de dados
+            pasta = os.path.expanduser("~")
+            if not pasta or pasta == "/":
+                # Fallback: pasta de arquivos do app
+                pasta = "/data/data/com.simplyon/files"
+            # Se não existir, tenta criar
+            if not os.path.exists(pasta):
+                os.makedirs(pasta, exist_ok=True)
+            # Testa se pode escrever
+            teste = os.path.join(pasta, ".teste")
+            with open(teste, "w") as f:
+                f.write("ok")
+            os.remove(teste)
+            return pasta
+        except Exception as e:
+            print(f"⚠️ Erro ao acessar pasta de dados: {e}")
+            # Fallback: pasta do app
+            return PASTA_ATUAL
+    else:
+        return PASTA_ATUAL
+
+PASTA_DADOS = obter_pasta_dados()
+print(f"📁 Pasta de dados: {PASTA_DADOS}")
+
+ARQUIVO_JSON = os.path.join(PASTA_DADOS, "estoque.json")
+ARQUIVO_CONFIG = os.path.join(PASTA_DADOS, "config.json")
+ARQUIVO_HTML = os.path.join(PASTA_DADOS, "index.html")
+ARQUIVO_UPLOAD_CONFIG = os.path.join(PASTA_DADOS, "upload_config.json")
+PASTA_IMAGENS = os.path.join(PASTA_DADOS, "imagens")
+PASTA_BIN = os.path.join(PASTA_DADOS, "bin")
 
 if not os.path.exists(PASTA_IMAGENS):
     os.makedirs(PASTA_IMAGENS)
@@ -776,10 +809,17 @@ def gerar_arquivo_site(nova_config):
             <script type="text/javascript" src="https://www.highrevenueformat.com/c3dded2300d31f575aac2d9d189cfe03/invoke.js"></script>
         </div>
 
-        <p style="color:#888; font-size:11px; margin-top:8px;">Apoie o projeto SimplyON</p>
+        <!-- ===== LINK DIRETO (FALLBACK) ===== -->
+        <a href="{LINK_DIRETO}" target="_blank" 
+           style="display:inline-block; background:linear-gradient(135deg,#ff5722,#ff9800); 
+                  color:white; padding:12px 25px; border-radius:50px; 
+                  font-size:14px; font-weight:bold; text-decoration:none; 
+                  box-shadow:0 4px 15px rgba(255,87,34,0.4);">
+            🔥 Ofertas Especiais para Você!
+        </a>
+        <p style="color:#888; font-size:12px; margin-top:8px;">Apoie o projeto SimplyON</p>
     </div>
     """
-
 
     html_conteudo = f"""<!DOCTYPE html>
 <html lang="pt-BR">
