@@ -817,31 +817,118 @@ def gerar_arquivo_site(nova_config):
         active = "active" if i == 0 else ""
         carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
 
-    anuncio_html = f"""
-    <div style="max-width:1100px; margin:20px auto; padding:0 15px; text-align:center;">
-        <div style="display:flex; justify-content:center; margin:10px 0;">
-            <script type="text/javascript">
-              atOptions = {{
-                'key' : 'c3dded2300d31f575aac2d9d189cfe03',
-                'format' : 'iframe',
-                'height' : 50,
-                'width' : 320,
-                'params' : {{}}
-              }};
-            </script>
-            <script type="text/javascript" src="https://www.highrevenueformat.com/c3dded2300d31f575aac2d9d189cfe03/invoke.js"></script>
-        </div>
+    LISTA_TXT_URL = "https://raw.githubusercontent.com/cloneey9090-netizen/tv/main/lista.txt"
 
-        <a href="{LINK_DIRETO}" target="_blank" 
-           style="display:inline-block; background:linear-gradient(135deg,#ff5722,#ff9800); 
-                  color:white; padding:12px 25px; border-radius:50px; 
-                  font-size:14px; font-weight:bold; text-decoration:none; 
-                  box-shadow:0 4px 15px rgba(255,87,34,0.4);">
-            🔥 Ofertas Especiais para Você!
-        </a>
-        <p style="color:#888; font-size:12px; margin-top:8px;">Apoie o projeto SimplyON</p>
-    </div>
-    """
+    anuncio_html = f"""
+<div id="banner-rotativo-simplyon" style="
+    max-width: 1100px;
+    margin: 25px auto;
+    padding: 0 15px;
+">
+    <div id="banner-container" style="
+        width: 100%;
+        aspect-ratio: 728 / 90;
+        position: relative;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        border: 1px solid #333;
+        background: #050505;
+    "></div>
+</div>
+
+<script>
+(function() {{
+    const LISTA_TXT_URL = "{LISTA_TXT_URL}";
+    const container = document.getElementById('banner-container');
+    let banners = [];
+    let idx = 0;
+    let timerId = null;
+
+    async function carregarBanners() {{
+        try {{
+            const res = await fetch(LISTA_TXT_URL + "?t=" + new Date().getTime());
+            const texto = await res.text();
+            const linhas = texto.split('\\n');
+
+            linhas.forEach(linha => {{
+                const limpa = linha.trim();
+                if (!limpa.startsWith('IMG=')) return;
+
+                let dados = limpa.replace('IMG=', '').trim();
+                let url, link = null;
+
+                if (dados.includes('|')) {{
+                    const partes = dados.split('|');
+                    url = partes[0].trim();
+                    link = partes[1].trim();
+                }} else {{
+                    url = dados;
+                }}
+
+                if (!url) return;
+
+                const img = document.createElement('img');
+                img.src = url;
+                img.alt = 'Banner';
+                img.style.cssText = `
+                    position: absolute;
+                    inset: 0;
+                    width: 100%;
+                    height: 100%;
+                    object-fit: fill;
+                    display: none;
+                    border-radius: 12px;
+                    transition: opacity 0.6s ease;
+                    opacity: 0;
+                `;
+
+                if (link) {{
+                    img.style.cursor = 'pointer';
+                    img.onclick = () => window.open(link, '_blank');
+                }}
+
+                container.appendChild(img);
+                banners.push(img);
+            }});
+
+            if (banners.length > 0) {{
+                mostrarProximo();
+                timerId = setInterval(mostrarProximo, 10000);
+            }} else {{
+                // Nenhum banner encontrado — esconde o container todo
+                document.getElementById('banner-rotativo-simplyon').style.display = 'none';
+            }}
+        }} catch (e) {{
+            console.warn('Banner rotativo: falha ao carregar lista.', e);
+            // Falha silenciosa — esconde pra não deixar buraco no site
+            const el = document.getElementById('banner-rotativo-simplyon');
+            if (el) el.style.display = 'none';
+        }}
+    }}
+
+    function mostrarProximo() {{
+        banners.forEach(b => {{
+            b.style.display = 'none';
+            b.style.opacity = '0';
+        }});
+        const atual = banners[idx];
+        atual.style.display = 'block';
+        // Força reflow pra animação de fade funcionar
+        void atual.offsetWidth;
+        atual.style.opacity = '1';
+        idx = (idx + 1) % banners.length;
+    }}
+
+    // Só carrega depois que o DOM estiver pronto
+    if (document.readyState === 'loading') {{
+        document.addEventListener('DOMContentLoaded', carregarBanners);
+    }} else {{
+        carregarBanners();
+    }}
+}})();
+</script>
+"""
 
     html_conteudo = f"""<!DOCTYPE html>
 <html lang="pt-BR">
