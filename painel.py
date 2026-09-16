@@ -822,7 +822,7 @@ def gerar_arquivo_site(nova_config):
     anuncio_html = f"""
 <div id="banner-rotativo-simplyon" style="
     max-width: 1100px;
-    margin: 25px auto;
+    margin: 5px auto;
     padding: 0 15px;
 ">
     <div id="banner-container" style="
