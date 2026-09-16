@@ -826,15 +826,16 @@ def gerar_arquivo_site(nova_config):
     padding: 0 15px;
 ">
     <div id="banner-container" style="
-        width: 100%;
-        aspect-ratio: 728 / 90;
-        position: relative;
-        border-radius: 12px;
-        overflow: hidden;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.4);
-        border: 1px solid #333;
-        background: #050505;
-    "></div>
+    width: 100%;
+    position: relative;
+    padding-bottom: 20%;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+    border: 1px solid {border_color};
+    background: #050505;
+    max-height: 180px;
+"></div>
 </div>
 
 <script>
@@ -877,6 +878,7 @@ def gerar_arquivo_site(nova_config):
                     width: 100%;
                     height: 100%;
                     object-fit: fill;
+                    background: #000;
                     display: none;
                     border-radius: 12px;
                     transition: opacity 0.6s ease;
