@@ -3,11 +3,15 @@ name: Build APK
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout código
@@ -51,9 +55,32 @@ jobs:
           echo "=== ARQUIVOS GERADOS ==="
           find build -name "*.apk" -type f
 
-      - name: Upload APK
+      - name: Renomear APK para nome fixo
+        run: |
+          mkdir -p output
+          cp build/apk/*.apk output/app-release.apk
+          ls -la output/
+
+      - name: Upload como Artifact (backup)
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: build/apk/*.apk
+          name: app-release-artifact
+          path: output/app-release.apk
           if-no-files-found: error
+
+      - name: Publicar como Release (só quando for tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: output/app-release.apk
+          name: SimplyON ${{ github.ref_name }}
+          body: |
+            ## SimplyON ${{ github.ref_name }}
+
+            **Baixar APK:** [app-release.apk](https://github.com/${{ github.repository }}/releases/latest/download/app-release.apk)
+
+            ---
+
+            Build automático do app SimplyON.
+          draft: false
+          prerelease: false
