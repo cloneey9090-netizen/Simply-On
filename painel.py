@@ -817,120 +817,184 @@ def gerar_arquivo_site(nova_config):
         active = "active" if i == 0 else ""
         carousel_html += f'<div class="carousel-slide {active}" style="background-image: url(\'{url}\');"></div>'
 
-    LISTA_TXT_URL = "https://raw.githubusercontent.com/cloneey9090-netizen/tv/main/lista.txt"
+    # Bússola: aponta pro config.json que diz onde está o lista.txt de verdade.
+    # Se um dia você mudar de host, só troca o valor dentro do config.json — o app nunca precisa saber.
+        # ============================================================
+    # ===== BANNER ROTATIVO (bússola config.json + smartlinks) ===
+    # ============================================================
+    # 🧭 A bússola: aponta pro config.json. Se um dia mudar de host,
+    #    só troca o url_lista dentro do config.json.
+    CONFIG_URL = "https://raw.githubusercontent.com/cloneey9090-netizen/tv/main/config.json"
+
+
+    # 🛟 Fallback: usado se o config.json falhar
+    LISTA_TXT_FALLBACK = "https://raw.githubusercontent.com/cloneey9090-netizen/tv/main/lista.txt"
 
     anuncio_html = f"""
-<div id="banner-rotativo-simplyon" style="
-    max-width: 1100px;
-    margin: 5px auto;
-    padding: 0 15px;
-">
-    <div id="banner-container" style="
-    width: 100%;
-    position: relative;
-    padding-bottom: 20%;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.4);
-    border: 1px solid {border_color};
-    background: #050505;
-    max-height: 180px;
-"></div>
-</div>
+    <div id="banner-rotativo-simplyon" style="max-width:1100px; margin:5px auto 25px auto; padding:0 15px;">
+        <div id="banner-container" style="
+            width: 100%;
+            position: relative;
+            padding-bottom: 20%;
+            border-radius: 1px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+            border: 1px solid {border_color};
+            background: #050505;
+            max-height: 180px;
+        "></div>
+        <div style="text-align:center; font-size:10px; color:#666; margin-top:4px; letter-spacing:1px; text-transform:uppercase;">publicidade</div>
+    </div>
 
-<script>
-(function() {{
-    const LISTA_TXT_URL = "{LISTA_TXT_URL}";
-    const container = document.getElementById('banner-container');
-    let banners = [];
-    let idx = 0;
-    let timerId = null;
+    <script>
+    (function() {{
+        // 🧭 Bússola — muda aqui só se mudar de host
+        const CONFIG_URL = "{CONFIG_URL}";
+        // 🛟 Fallback — usado se o config.json falhar
+        const LISTA_FALLBACK = "{LISTA_TXT_FALLBACK}";
 
-    async function carregarBanners() {{
-        try {{
-            const res = await fetch(LISTA_TXT_URL + "?t=" + new Date().getTime());
-            const texto = await res.text();
-            const linhas = texto.split('\\n');
+        const container = document.getElementById('banner-container');
+        if (!container) return;
 
-            linhas.forEach(linha => {{
-                const limpa = linha.trim();
-                if (!limpa.startsWith('IMG=')) return;
+        let banners = [];
+        let idx = 0;
 
-                let dados = limpa.replace('IMG=', '').trim();
-                let url, link = null;
+        // ============================================================
+        // 🔗 NORMALIZA LINK (limpa WhatsApp, aceita smartlink normal)
+        // ============================================================
+        function normalizarLink(linkBruto) {{
+            if (!linkBruto) return null;
+            let link = String(linkBruto).trim();
+            if (!link) return null;
 
-                if (dados.includes('|')) {{
-                    const partes = dados.split('|');
-                    url = partes[0].trim();
-                    link = partes[1].trim();
-                }} else {{
-                    url = dados;
+            const linkLower = link.toLowerCase();
+
+            // 🧹 Se for link direto do WhatsApp, extrai só o número
+            if (linkLower.includes('wa.me') || linkLower.includes('api.whatsapp.com')) {{
+                const match = link.match(/(?:wa\\.me\\/|phone=)([\\d+\\s\\-()]+)/);
+                if (match) {{
+                    const numeroLimpo = match[1].replace(/\\D/g, '');
+                    if (numeroLimpo) {{
+                        return `https://wa.me/${{numeroLimpo}}`;
+                    }}
+                    return null;  // sem número, desativa o clique
                 }}
-
-                if (!url) return;
-
-                const img = document.createElement('img');
-                img.src = url;
-                img.alt = 'Banner';
-                img.style.cssText = `
-                    position: absolute;
-                    inset: 0;
-                    width: 100%;
-                    height: 100%;
-                    object-fit: fill;
-                    background: #000;
-                    display: none;
-                    border-radius: 12px;
-                    transition: opacity 0.6s ease;
-                    opacity: 0;
-                `;
-
-                if (link) {{
-                    img.style.cursor = 'pointer';
-                    img.onclick = () => window.open(link, '_blank');
-                }}
-
-                container.appendChild(img);
-                banners.push(img);
-            }});
-
-            if (banners.length > 0) {{
-                mostrarProximo();
-                timerId = setInterval(mostrarProximo, 10000);
-            }} else {{
-                // Nenhum banner encontrado — esconde o container todo
-                document.getElementById('banner-rotativo-simplyon').style.display = 'none';
+                return null;
             }}
-        }} catch (e) {{
-            console.warn('Banner rotativo: falha ao carregar lista.', e);
-            // Falha silenciosa — esconde pra não deixar buraco no site
-            const el = document.getElementById('banner-rotativo-simplyon');
-            if (el) el.style.display = 'none';
+
+            // 🎯 Smartlinks, afiliados, links normais: usa como veio
+            // (bit.ly, hotmart, monetizze, braip, smartlink, etc — todos passam aqui)
+            return link;
         }}
-    }}
 
-    function mostrarProximo() {{
-        banners.forEach(b => {{
-            b.style.display = 'none';
-            b.style.opacity = '0';
-        }});
-        const atual = banners[idx];
-        atual.style.display = 'block';
-        // Força reflow pra animação de fade funcionar
-        void atual.offsetWidth;
-        atual.style.opacity = '1';
-        idx = (idx + 1) % banners.length;
-    }}
+        // ============================================================
+        // PASSO 1: Descobre onde está a lista (via bússola)
+        // ============================================================
+        async function descobrirUrlDaLista() {{
+            try {{
+                const resp = await fetch(CONFIG_URL + "?t=" + new Date().getTime());
+                if (!resp.ok) throw new Error("config.json não respondeu");
+                const config = await resp.json();
+                if (config && config.url_lista) {{
+                    return config.url_lista;
+                }}
+                throw new Error("config.json sem campo url_lista");
+            }} catch (e) {{
+                console.warn("Bússola falhou, usando fallback:", e.message);
+                return LISTA_FALLBACK;
+            }}
+        }}
 
-    // Só carrega depois que o DOM estiver pronto
-    if (document.readyState === 'loading') {{
-        document.addEventListener('DOMContentLoaded', carregarBanners);
-    }} else {{
-        carregarBanners();
-    }}
-}})();
-</script>
-"""
+        // ============================================================
+        // PASSO 2: Busca a lista de banners e monta os slides
+        // ============================================================
+        async function carregarBanners() {{
+            const listaUrl = await descobrirUrlDaLista();
+
+            try {{
+                const res = await fetch(listaUrl + "?t=" + new Date().getTime());
+                const texto = await res.text();
+                const linhas = texto.split('\\n');
+
+                linhas.forEach(linha => {{
+                    const limpa = linha.trim();
+                    if (!limpa.startsWith('IMG=')) return;
+
+                    let dados = limpa.replace('IMG=', '').trim();
+                    let url, linkBruto = null;
+
+                    if (dados.includes('|')) {{
+                        const partes = dados.split('|');
+                        url = partes[0].trim();
+                        linkBruto = partes[1].trim();
+                    }} else {{
+                        url = dados;
+                    }}
+
+                    if (!url) return;
+
+                    const link = normalizarLink(linkBruto);
+
+                    const img = document.createElement('img');
+                    img.src = url;
+                    img.alt = 'Banner';
+                    img.style.cssText = `
+                        position: absolute;
+                        inset: 0;
+                        width: 100%;
+                        height: 100%;
+                        object-fit: fill;
+                        background: #000;
+                        display: none;
+                        border-radius: 1px;
+                        transition: opacity 0.6s ease;
+                        opacity: 0;
+                    `;
+
+                    if (link) {{
+                        img.style.cursor = 'pointer';
+                        img.onclick = () => window.open(link, '_blank');
+                    }}
+
+                    container.appendChild(img);
+                    banners.push(img);
+                }});
+
+                if (banners.length > 0) {{
+                    mostrarProximo();
+                    setInterval(mostrarProximo, 10000);
+                }} else {{
+                    const el = document.getElementById('banner-rotativo-simplyon');
+                    if (el) el.style.display = 'none';
+                }}
+            }} catch (e) {{
+                console.warn('Banner rotativo: falha ao carregar lista.', e);
+                const el = document.getElementById('banner-rotativo-simplyon');
+                if (el) el.style.display = 'none';
+            }}
+        }}
+
+        function mostrarProximo() {{
+            banners.forEach(b => {{
+                b.style.display = 'none';
+                b.style.opacity = '0';
+            }});
+            const atual = banners[idx];
+            if (!atual) return;
+            atual.style.display = 'block';
+            void atual.offsetWidth;
+            atual.style.opacity = '1';
+            idx = (idx + 1) % banners.length;
+        }}
+
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', carregarBanners);
+        }} else {{
+            carregarBanners();
+        }}
+    }})();
+    </script>
+    """
 
     html_conteudo = f"""<!DOCTYPE html>
 <html lang="pt-BR">
