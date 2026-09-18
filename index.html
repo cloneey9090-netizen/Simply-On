@@ -1,665 +1,857 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SimplyON! — Seu negócio no ar, simplesmente online</title>
-    <meta name="description" content="Crie, gerencie e publique seu catálogo online direto do celular. Simples, rápido e gratuito.">
+    <meta
+      name="description"
+      content="Crie, gerencie e publique seu catálogo online direto do celular. Simples, rápido e gratuito."
+    />
 
-    <meta name="monetag" content="48730be7ef77a27554023ddf32c24376">
+    <meta name="monetag" content="48730be7ef77a27554023ddf32c24376" />
 
-    <meta property="og:title" content="SimplyON! — Seu negócio no ar">
-    <meta property="og:description" content="Crie seu catálogo online em minutos, direto do celular.">
-    <meta property="og:image" content="assets/icone.png">
-    <meta property="og:type" content="website">
+    <meta property="og:title" content="SimplyON! — Seu negócio no ar" />
+    <meta
+      property="og:description"
+      content="Crie seu catálogo online em minutos, direto do celular."
+    />
+    <meta property="og:image" content="assets/icone.png" />
+    <meta property="og:type" content="website" />
 
-    <link rel="icon" href="assets/icone.png">
+    <link rel="icon" href="assets/icone.png" />
 
     <!-- ===== SOCIAL BAR ADSTERRA ===== -->
     <script src="https://pl31345754.profitableratecpmnetwork.com/a2/dd/ac/a2ddaca2815dc7927d263fdb01c56352.js"></script>
 
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html { scroll-behavior: smooth; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-            background: #0f172a;
-            color: #f8fafc;
-            line-height: 1.6;
-            overflow-x: hidden;
-        }
-        img { max-width: 100%; display: block; }
-        a { color: inherit; text-decoration: none; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        font-family:
+          "Inter",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          Arial,
+          sans-serif;
+        background: #0f172a;
+        color: #f8fafc;
+        line-height: 1.6;
+        overflow-x: hidden;
+      }
+      img {
+        max-width: 100%;
+        display: block;
+      }
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
 
-        .reveal {
-            opacity: 0;
-            transform: translateY(30px);
-            transition: opacity 0.7s ease, transform 0.7s ease;
-        }
-        .reveal.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
+      .reveal {
+        opacity: 0;
+        transform: translateY(30px);
+        transition:
+          opacity 0.7s ease,
+          transform 0.7s ease;
+      }
+      .reveal.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
 
+      .hero {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 60px 20px 40px;
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(
+            circle at 20% 20%,
+            rgba(56, 189, 248, 0.15),
+            transparent 50%
+          ),
+          radial-gradient(
+            circle at 80% 80%,
+            rgba(14, 165, 233, 0.15),
+            transparent 50%
+          ),
+          #0f172a;
+      }
+      .hero::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          120deg,
+          transparent 30%,
+          rgba(56, 189, 248, 0.05) 50%,
+          transparent 70%
+        );
+        animation: shimmer 8s linear infinite;
+        pointer-events: none;
+      }
+      @keyframes shimmer {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(100%);
+        }
+      }
+
+      .logo {
+        width: 140px;
+        height: 140px;
+        border-radius: 28px;
+        margin-bottom: 24px;
+        box-shadow:
+          0 20px 50px rgba(56, 189, 248, 0.25),
+          0 10px 25px rgba(0, 0, 0, 0.5);
+        border: 2px solid #334155;
+        animation: float 4s ease-in-out infinite;
+        z-index: 1;
+      }
+      @keyframes float {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        50% {
+          transform: translateY(-10px);
+        }
+      }
+
+      .hero h1 {
+        font-size: clamp(2.5rem, 8vw, 4rem);
+        font-weight: 800;
+        letter-spacing: -1px;
+        margin-bottom: 8px;
+        z-index: 1;
+      }
+      .hero h1 span {
+        color: #38bdf8;
+        text-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
+      }
+      .slogan {
+        font-size: clamp(1rem, 3vw, 1.3rem);
+        color: #94a3b8;
+        margin-bottom: 12px;
+        z-index: 1;
+      }
+      .subtitulo {
+        font-size: 0.95rem;
+        color: #64748b;
+        max-width: 500px;
+        margin: 0 auto 32px;
+        z-index: 1;
+      }
+
+      .botoes {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+        z-index: 1;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 15px 32px;
+        background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+        color: #0f172a;
+        font-weight: 700;
+        font-size: 1rem;
+        border-radius: 12px;
+        box-shadow: 0 8px 25px rgba(56, 189, 248, 0.35);
+        transition:
+          transform 0.2s,
+          box-shadow 0.2s;
+        cursor: pointer;
+        border: none;
+      }
+      .btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px rgba(56, 189, 248, 0.5);
+      }
+      .btn:active {
+        transform: translateY(-1px);
+      }
+      .btn-secundario {
+        background: transparent;
+        color: #38bdf8;
+        border: 2px solid #334155;
+        box-shadow: none;
+      }
+      .btn-secundario:hover {
+        background: #1e293b;
+        border-color: #38bdf8;
+        box-shadow: 0 8px 25px rgba(56, 189, 248, 0.15);
+      }
+
+      section {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 80px 20px;
+      }
+      .section-titulo {
+        text-align: center;
+        font-size: clamp(1.6rem, 5vw, 2.2rem);
+        font-weight: 800;
+        margin-bottom: 12px;
+      }
+      .section-titulo span {
+        color: #38bdf8;
+      }
+      .section-subtitulo {
+        text-align: center;
+        color: #94a3b8;
+        font-size: 1rem;
+        margin-bottom: 50px;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .passos {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px;
+      }
+      .passo {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 16px;
+        padding: 28px 22px;
+        text-align: center;
+        transition:
+          transform 0.3s,
+          border-color 0.3s,
+          box-shadow 0.3s;
+      }
+      .passo:hover {
+        transform: translateY(-5px);
+        border-color: #38bdf8;
+        box-shadow: 0 15px 40px rgba(56, 189, 248, 0.15);
+      }
+      .passo-numero {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 16px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+        color: #0f172a;
+        font-size: 1.6rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 20px rgba(56, 189, 248, 0.3);
+      }
+      .passo h4 {
+        font-size: 1.1rem;
+        margin-bottom: 8px;
+        color: #f8fafc;
+      }
+      .passo p {
+        font-size: 0.9rem;
+        color: #94a3b8;
+        line-height: 1.5;
+      }
+
+      .ad-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 260px;
+      }
+      .ad-wrapper {
+        display: inline-block;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .ad-label {
+        text-align: center;
+        font-size: 10px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 6px;
+      }
+
+      .screenshots {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 20px;
+      }
+      .screenshot {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 20px;
+        padding: 12px;
+        overflow: hidden;
+        transition:
+          transform 0.3s,
+          box-shadow 0.3s;
+      }
+      .screenshot:hover {
+        transform: translateY(-8px) scale(1.02);
+        box-shadow: 0 20px 50px rgba(56, 189, 248, 0.2);
+      }
+      .screenshot img {
+        width: 100%;
+        border-radius: 14px;
+        aspect-ratio: 9 / 16;
+        object-fit: cover;
+        background: #0f172a;
+      }
+      .screenshot-legenda {
+        text-align: center;
+        font-size: 0.85rem;
+        color: #94a3b8;
+        margin-top: 12px;
+        font-weight: 600;
+      }
+
+      .recursos {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 18px;
+      }
+      .recurso {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 14px;
+        padding: 22px;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        transition:
+          border-color 0.3s,
+          transform 0.3s;
+      }
+      .recurso:hover {
+        border-color: #38bdf8;
+        transform: translateY(-3px);
+      }
+      .recurso-icone {
+        font-size: 1.8rem;
+        flex-shrink: 0;
+        line-height: 1;
+      }
+      .recurso h4 {
+        font-size: 1rem;
+        margin-bottom: 4px;
+      }
+      .recurso p {
+        font-size: 0.85rem;
+        color: #94a3b8;
+        line-height: 1.5;
+      }
+
+      .faq {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      details {
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 18px 22px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: border-color 0.3s;
+      }
+      details[open] {
+        border-color: #38bdf8;
+      }
+      details summary {
+        font-weight: 600;
+        font-size: 1rem;
+        color: #f8fafc;
+        list-style: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      details summary::-webkit-details-marker {
+        display: none;
+      }
+      details summary::after {
+        content: "+";
+        color: #38bdf8;
+        font-size: 1.4rem;
+        font-weight: 700;
+        transition: transform 0.3s;
+      }
+      details[open] summary::after {
+        content: "−";
+        transform: rotate(180deg);
+      }
+      details p {
+        margin-top: 12px;
+        color: #94a3b8;
+        font-size: 0.9rem;
+        line-height: 1.6;
+      }
+
+      .cta-section {
+        padding-bottom: 120px;
+      }
+      .cta {
+        background: linear-gradient(135deg, #1e293b, #0f172a);
+        border: 1px solid #334155;
+        border-radius: 24px;
+        padding: 60px 30px;
+        text-align: center;
+        max-width: 800px;
+        margin: 0 auto;
+        position: relative;
+        overflow: hidden;
+      }
+      .cta::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(
+          circle,
+          rgba(56, 189, 248, 0.15),
+          transparent 60%
+        );
+        animation: pulse 6s ease-in-out infinite;
+        pointer-events: none;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 0.6;
+        }
+        50% {
+          transform: scale(1.15);
+          opacity: 1;
+        }
+      }
+      .cta h2 {
+        font-size: clamp(1.5rem, 4vw, 2rem);
+        margin-bottom: 12px;
+        z-index: 1;
+        position: relative;
+      }
+      .cta p {
+        color: #94a3b8;
+        margin-bottom: 28px;
+        z-index: 1;
+        position: relative;
+      }
+      .cta .botoes {
+        position: relative;
+        z-index: 1;
+      }
+
+      footer {
+        padding: 40px 20px;
+        text-align: center;
+        color: #64748b;
+        font-size: 0.85rem;
+        border-top: 1px solid #1e293b;
+        margin-top: 40px;
+      }
+      footer a {
+        color: #38bdf8;
+        transition: opacity 0.2s;
+      }
+      footer a:hover {
+        opacity: 0.8;
+      }
+      .footer-links {
+        display: flex;
+        gap: 20px;
+        justify-content: center;
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 600px) {
+        section {
+          padding: 60px 16px;
+        }
         .hero {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding: 60px 20px 40px;
-            position: relative;
-            overflow: hidden;
-            background:
-                radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.15), transparent 50%),
-                radial-gradient(circle at 80% 80%, rgba(14, 165, 233, 0.15), transparent 50%),
-                #0f172a;
+          min-height: auto;
+          padding: 80px 16px 60px;
         }
-        .hero::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(120deg, transparent 30%, rgba(56, 189, 248, 0.05) 50%, transparent 70%);
-            animation: shimmer 8s linear infinite;
-            pointer-events: none;
-        }
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-
         .logo {
-            width: 140px;
-            height: 140px;
-            border-radius: 28px;
-            margin-bottom: 24px;
-            box-shadow: 0 20px 50px rgba(56, 189, 248, 0.25), 0 10px 25px rgba(0, 0, 0, 0.5);
-            border: 2px solid #334155;
-            animation: float 4s ease-in-out infinite;
-            z-index: 1;
-        }
-        @keyframes float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
-        }
-
-        .hero h1 {
-            font-size: clamp(2.5rem, 8vw, 4rem);
-            font-weight: 800;
-            letter-spacing: -1px;
-            margin-bottom: 8px;
-            z-index: 1;
-        }
-        .hero h1 span {
-            color: #38bdf8;
-            text-shadow: 0 0 30px rgba(56, 189, 248, 0.5);
-        }
-        .slogan {
-            font-size: clamp(1rem, 3vw, 1.3rem);
-            color: #94a3b8;
-            margin-bottom: 12px;
-            z-index: 1;
-        }
-        .subtitulo {
-            font-size: 0.95rem;
-            color: #64748b;
-            max-width: 500px;
-            margin: 0 auto 32px;
-            z-index: 1;
-        }
-
-        .botoes {
-            display: flex;
-            gap: 12px;
-            flex-wrap: wrap;
-            justify-content: center;
-            z-index: 1;
+          width: 110px;
+          height: 110px;
         }
         .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 15px 32px;
-            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
-            color: #0f172a;
-            font-weight: 700;
-            font-size: 1rem;
-            border-radius: 12px;
-            box-shadow: 0 8px 25px rgba(56, 189, 248, 0.35);
-            transition: transform 0.2s, box-shadow 0.2s;
-            cursor: pointer;
-            border: none;
+          padding: 13px 24px;
+          font-size: 0.95rem;
         }
-        .btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 12px 30px rgba(56, 189, 248, 0.5);
+        .botoes {
+          flex-direction: column;
+          width: 100%;
+          max-width: 320px;
         }
-        .btn:active { transform: translateY(-1px); }
-        .btn-secundario {
-            background: transparent;
-            color: #38bdf8;
-            border: 2px solid #334155;
-            box-shadow: none;
+        .btn {
+          width: 100%;
+          justify-content: center;
         }
-        .btn-secundario:hover {
-            background: #1e293b;
-            border-color: #38bdf8;
-            box-shadow: 0 8px 25px rgba(56, 189, 248, 0.15);
-        }
-
-        section {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 80px 20px;
-        }
-        .section-titulo {
-            text-align: center;
-            font-size: clamp(1.6rem, 5vw, 2.2rem);
-            font-weight: 800;
-            margin-bottom: 12px;
-        }
-        .section-titulo span { color: #38bdf8; }
-        .section-subtitulo {
-            text-align: center;
-            color: #94a3b8;
-            font-size: 1rem;
-            margin-bottom: 50px;
-            max-width: 600px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .passos {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-        }
-        .passo {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 16px;
-            padding: 28px 22px;
-            text-align: center;
-            transition: transform 0.3s, border-color 0.3s, box-shadow 0.3s;
-        }
-        .passo:hover {
-            transform: translateY(-5px);
-            border-color: #38bdf8;
-            box-shadow: 0 15px 40px rgba(56, 189, 248, 0.15);
-        }
-        .passo-numero {
-            width: 56px;
-            height: 56px;
-            margin: 0 auto 16px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #38bdf8, #0ea5e9);
-            color: #0f172a;
-            font-size: 1.6rem;
-            font-weight: 800;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 8px 20px rgba(56, 189, 248, 0.3);
-        }
-        .passo h4 {
-            font-size: 1.1rem;
-            margin-bottom: 8px;
-            color: #f8fafc;
-        }
-        .passo p {
-            font-size: 0.9rem;
-            color: #94a3b8;
-            line-height: 1.5;
-        }
-
         .ad-container {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 260px;
+          padding: 15px;
+          min-height: auto;
         }
-        .ad-wrapper {
-            display: inline-block;
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 10px;
-        }
-        .ad-label {
-            text-align: center;
-            font-size: 10px;
-            color: #64748b;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-top: 6px;
-        }
-
-        .screenshots {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 20px;
-        }
-        .screenshot {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 20px;
-            padding: 12px;
-            overflow: hidden;
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-        .screenshot:hover {
-            transform: translateY(-8px) scale(1.02);
-            box-shadow: 0 20px 50px rgba(56, 189, 248, 0.2);
-        }
-        .screenshot img {
-            width: 100%;
-            border-radius: 14px;
-            aspect-ratio: 9 / 16;
-            object-fit: cover;
-            background: #0f172a;
-        }
-        .screenshot-legenda {
-            text-align: center;
-            font-size: 0.85rem;
-            color: #94a3b8;
-            margin-top: 12px;
-            font-weight: 600;
-        }
-
-        .recursos {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 18px;
-        }
-        .recurso {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 14px;
-            padding: 22px;
-            display: flex;
-            gap: 14px;
-            align-items: flex-start;
-            transition: border-color 0.3s, transform 0.3s;
-        }
-        .recurso:hover {
-            border-color: #38bdf8;
-            transform: translateY(-3px);
-        }
-        .recurso-icone {
-            font-size: 1.8rem;
-            flex-shrink: 0;
-            line-height: 1;
-        }
-        .recurso h4 {
-            font-size: 1rem;
-            margin-bottom: 4px;
-        }
-        .recurso p {
-            font-size: 0.85rem;
-            color: #94a3b8;
-            line-height: 1.5;
-        }
-
-        .faq {
-            max-width: 720px;
-            margin: 0 auto;
-        }
-        details {
-            background: #1e293b;
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 18px 22px;
-            margin-bottom: 12px;
-            cursor: pointer;
-            transition: border-color 0.3s;
-        }
-        details[open] {
-            border-color: #38bdf8;
-        }
-        details summary {
-            font-weight: 600;
-            font-size: 1rem;
-            color: #f8fafc;
-            list-style: none;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-        }
-        details summary::-webkit-details-marker { display: none; }
-        details summary::after {
-            content: '+';
-            color: #38bdf8;
-            font-size: 1.4rem;
-            font-weight: 700;
-            transition: transform 0.3s;
-        }
-        details[open] summary::after {
-            content: '−';
-            transform: rotate(180deg);
-        }
-        details p {
-            margin-top: 12px;
-            color: #94a3b8;
-            font-size: 0.9rem;
-            line-height: 1.6;
-        }
-
         .cta-section {
-            padding-bottom: 120px;
+          padding-bottom: 180px;
         }
-        .cta {
-            background: linear-gradient(135deg, #1e293b, #0f172a);
-            border: 1px solid #334155;
-            border-radius: 24px;
-            padding: 60px 30px;
-            text-align: center;
-            max-width: 800px;
-            margin: 0 auto;
-            position: relative;
-            overflow: hidden;
-        }
-        .cta::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: radial-gradient(circle, rgba(56, 189, 248, 0.15), transparent 60%);
-            animation: pulse 6s ease-in-out infinite;
-            pointer-events: none;
-        }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); opacity: 0.6; }
-            50% { transform: scale(1.15); opacity: 1; }
-        }
-        .cta h2 {
-            font-size: clamp(1.5rem, 4vw, 2rem);
-            margin-bottom: 12px;
-            z-index: 1;
-            position: relative;
-        }
-        .cta p {
-            color: #94a3b8;
-            margin-bottom: 28px;
-            z-index: 1;
-            position: relative;
-        }
-        .cta .botoes {
-            position: relative;
-            z-index: 1;
-        }
-
-        footer {
-            padding: 40px 20px;
-            text-align: center;
-            color: #64748b;
-            font-size: 0.85rem;
-            border-top: 1px solid #1e293b;
-            margin-top: 40px;
-        }
-        footer a {
-            color: #38bdf8;
-            transition: opacity 0.2s;
-        }
-        footer a:hover { opacity: 0.8; }
-        .footer-links {
-            display: flex;
-            gap: 20px;
-            justify-content: center;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-        }
-
-        @media (max-width: 600px) {
-            section { padding: 60px 16px; }
-            .hero { min-height: auto; padding: 80px 16px 60px; }
-            .logo { width: 110px; height: 110px; }
-            .btn { padding: 13px 24px; font-size: 0.95rem; }
-            .botoes { flex-direction: column; width: 100%; max-width: 320px; }
-            .btn { width: 100%; justify-content: center; }
-            .ad-container { padding: 15px; min-height: auto; }
-            .cta-section { padding-bottom: 180px; }
-        }
+      }
     </style>
-</head>
-<body>
-
+  </head>
+  <body>
     <!-- ===== HERO ===== -->
     <header class="hero">
-        <img src="assets/icone.png" alt="Logo SimplyON" class="logo" onerror="this.style.display='none'">
-        <h1>Simply<span>ON</span></h1>
-        <p class="slogan">Seu negócio no ar, simplesmente online</p>
-        <p class="subtitulo">
-            Crie, gerencie e publique seu catálogo de produtos direto do celular.
-            Sem precisar de computador, sem complicação.
-        </p>
-        <div class="botoes">
-            <a href="#download" class="btn">📥 Baixar APK</a>
-            <a href="#como-funciona" class="btn btn-secundario">▶ Como funciona</a>
-        </div>
+      <img
+        src="assets/icone.png"
+        alt="Logo SimplyON"
+        class="logo"
+        onerror="this.style.display = 'none'"
+      />
+      <h1>Simply<span>ON</span></h1>
+      <p class="slogan">Seu negócio no ar, simplesmente online</p>
+      <p class="subtitulo">
+        Crie, gerencie e publique seu catálogo de produtos direto do celular.
+        Sem precisar de computador, sem complicação.
+      </p>
+      <div class="botoes">
+        <a href="#download" class="btn">📥 Baixar APK</a>
+        <a href="#como-funciona" class="btn btn-secundario">▶ Como funciona</a>
+      </div>
     </header>
 
     <!-- ===== COMO FUNCIONA ===== -->
     <section id="como-funciona" class="reveal">
-        <h2 class="section-titulo">Como <span>funciona</span></h2>
-        <p class="section-subtitulo">
-            Em 4 passos simples você tem seu catálogo online no ar, pronto pra compartilhar com seus clientes.
-        </p>
+      <h2 class="section-titulo">Como <span>funciona</span></h2>
+      <p class="section-subtitulo">
+        Em 4 passos simples você tem seu catálogo online no ar, pronto pra
+        compartilhar com seus clientes.
+      </p>
 
-        <div class="passos">
-            <div class="passo">
-                <div class="passo-numero">1</div>
-                <h4>Cadastre seus produtos</h4>
-                <p>Adicione fotos, nomes, preços e categorias. Ou importe tudo de uma planilha Excel/CSV.</p>
-            </div>
-            <div class="passo">
-                <div class="passo-numero">2</div>
-                <h4>Personalize sua loja</h4>
-                <p>Escolha nome, cores, logo e banners. Deixe a cara do seu negócio.</p>
-            </div>
-            <div class="passo">
-                <div class="passo-numero">3</div>
-                <h4>Publique com 1 clique</h4>
-                <p>Hospede automaticamente no Netlify ou GitHub Pages. Ou compartilhe por link direto.</p>
-            </div>
-            <div class="passo">
-                <div class="passo-numero">4</div>
-                <h4>Compartilhe no WhatsApp</h4>
-                <p>Envie o link pros clientes. Eles veem o catálogo e pedem direto pra você.</p>
-            </div>
+      <div class="passos">
+        <div class="passo">
+          <div class="passo-numero">1</div>
+          <h4>Cadastre seus produtos</h4>
+          <p>
+            Adicione fotos, nomes, preços e categorias. Ou importe tudo de uma
+            planilha Excel/CSV.
+          </p>
         </div>
+        <div class="passo">
+          <div class="passo-numero">2</div>
+          <h4>Personalize sua loja</h4>
+          <p>
+            Escolha nome, cores, logo e banners. Deixe a cara do seu negócio.
+          </p>
+        </div>
+        <div class="passo">
+          <div class="passo-numero">3</div>
+          <h4>Publique com 1 clique</h4>
+          <p>
+            Hospede automaticamente no Netlify ou GitHub Pages. Ou compartilhe
+            por link direto.
+          </p>
+        </div>
+        <div class="passo">
+          <div class="passo-numero">4</div>
+          <h4>Compartilhe no WhatsApp</h4>
+          <p>
+            Envie o link pros clientes. Eles veem o catálogo e pedem direto pra
+            você.
+          </p>
+        </div>
+      </div>
     </section>
 
     <!-- ===== ANÚNCIO 1 ===== -->
     <div class="ad-container">
-        <div class="ad-wrapper">
-            <script>
-              atOptions = {
-                'key' : '4a36de81eb4d0734e3725b0c103092a0',
-                'format' : 'iframe',
-                'height' : 250,
-                'width' : 300,
-                'params' : {}
-              };
-            </script>
-            <script src="https://www.highrevenueformat.com/4a36de81eb4d0734e3725b0c103092a0/invoke.js"></script>
-            <div class="ad-label">publicidade</div>
-        </div>
+      <div class="ad-wrapper">
+        <script>
+          atOptions = {
+            key: "4a36de81eb4d0734e3725b0c103092a0",
+            format: "iframe",
+            height: 250,
+            width: 300,
+            params: {},
+          };
+        </script>
+        <script src="https://www.highrevenueformat.com/4a36de81eb4d0734e3725b0c103092a0/invoke.js"></script>
+        <div class="ad-label">publicidade</div>
+      </div>
     </div>
 
     <!-- ===== SCREENSHOTS ===== -->
     <section class="reveal">
-        <h2 class="section-titulo">Veja o <span>app em ação</span></h2>
-        <p class="section-subtitulo">
-            Interface pensada pra ser simples e rápida — você cadastra um produto em menos de 1 minuto.
-        </p>
+      <h2 class="section-titulo">Veja o <span>app em ação</span></h2>
+      <p class="section-subtitulo">
+        Interface pensada pra ser simples e rápida — você cadastra um produto em
+        menos de 1 minuto.
+      </p>
 
-        <div class="screenshots">
-            <div class="screenshot">
-                <img src="assets/tela-cadastro.png" alt="Tela de cadastro de produtos"
-                     onerror="this.style.background='#1e293b'; this.alt='Adicione assets/tela-cadastro.png'">
-                <p class="screenshot-legenda">📦 Cadastro de produtos</p>
-            </div>
-            <div class="screenshot">
-                <img src="assets/tela-config.png" alt="Tela de configurações"
-                     onerror="this.style.background='#1e293b'; this.alt='Adicione assets/tela-config.png'">
-                <p class="screenshot-legenda">🎨 Personalização da loja</p>
-            </div>
-            <div class="screenshot">
-                <img src="assets/tela-hospedagem.png" alt="Tela de hospedagem"
-                     onerror="this.style.background='#1e293b'; this.alt='Adicione assets/tela-hospedagem.png'">
-                <p class="screenshot-legenda">🚀 Hospedagem automática</p>
-            </div>
-            <div class="screenshot">
-                <img src="assets/tela-site.png" alt="Site gerado"
-                     onerror="this.style.background='#1e293b'; this.alt='Adicione assets/tela-site.png'">
-                <p class="screenshot-legenda">🌐 Catálogo publicado</p>
-            </div>
+      <div class="screenshots">
+        <div class="screenshot">
+          <img
+            src="assets/tela-cadastro.png"
+            alt="Tela de cadastro de produtos"
+            onerror="
+              this.style.background = '#1e293b';
+              this.alt = 'Adicione assets/tela-cadastro.png';
+            "
+          />
+          <p class="screenshot-legenda">📦 Cadastro de produtos</p>
         </div>
+        <div class="screenshot">
+          <img
+            src="assets/tela-config.png"
+            alt="Tela de configurações"
+            onerror="
+              this.style.background = '#1e293b';
+              this.alt = 'Adicione assets/tela-config.png';
+            "
+          />
+          <p class="screenshot-legenda">🎨 Personalização da loja</p>
+        </div>
+        <div class="screenshot">
+          <img
+            src="assets/tela-hospedagem.png"
+            alt="Tela de hospedagem"
+            onerror="
+              this.style.background = '#1e293b';
+              this.alt = 'Adicione assets/tela-hospedagem.png';
+            "
+          />
+          <p class="screenshot-legenda">🚀 Hospedagem automática</p>
+        </div>
+        <div class="screenshot">
+          <img
+            src="assets/tela-site.png"
+            alt="Site gerado"
+            onerror="
+              this.style.background = '#1e293b';
+              this.alt = 'Adicione assets/tela-site.png';
+            "
+          />
+          <p class="screenshot-legenda">🌐 Catálogo publicado</p>
+        </div>
+      </div>
     </section>
 
     <!-- ===== RECURSOS ===== -->
     <section class="reveal">
-        <h2 class="section-titulo">Tudo que você <span>precisa</span></h2>
-        <p class="section-subtitulo">
-            Um app completo pra vendedores autônomos que querem vender mais com menos esforço.
-        </p>
+      <h2 class="section-titulo">Tudo que você <span>precisa</span></h2>
+      <p class="section-subtitulo">
+        Um app completo pra vendedores autônomos que querem vender mais com
+        menos esforço.
+      </p>
 
-        <div class="recursos">
-            <div class="recurso">
-                <div class="recurso-icone">📦</div>
-                <div>
-                    <h4>Cadastro completo</h4>
-                    <p>Nome, modelo, preço, categoria, descrição e imagem — tudo organizado.</p>
-                </div>
-            </div>
-            <div class="recurso">
-                <div class="recurso-icone">📊</div>
-                <div>
-                    <h4>Importação em massa</h4>
-                    <p>Suba uma planilha Excel ou CSV e cadastre centenas de produtos de uma vez.</p>
-                </div>
-            </div>
-            <div class="recurso">
-                <div class="recurso-icone">🎨</div>
-                <div>
-                    <h4>Personalização total</h4>
-                    <p>Logo, cores, banners e tema (claro ou escuro) do jeito que você quiser.</p>
-                </div>
-            </div>
-            <div class="recurso">
-                <div class="recurso-icone">🚀</div>
-                <div>
-                    <h4>Hospedagem com 1 clique</h4>
-                    <p>Publique no Netlify ou GitHub Pages direto do celular, sem configuração.</p>
-                </div>
-            </div>
-            <div class="recurso">
-                <div class="recurso-icone">💬</div>
-                <div>
-                    <h4>Integração com WhatsApp</h4>
-                    <p>Carrinho de compras envia o pedido direto pro seu WhatsApp automaticamente.</p>
-                </div>
-            </div>
-            <div class="recurso">
-                <div class="recurso-icone">📱</div>
-                <div>
-                    <h4>100% mobile</h4>
-                    <p>Funciona no celular Android. Cadastre produtos de onde estiver.</p>
-                </div>
-            </div>
+      <div class="recursos">
+        <div class="recurso">
+          <div class="recurso-icone">📦</div>
+          <div>
+            <h4>Cadastro completo</h4>
+            <p>
+              Nome, modelo, preço, categoria, descrição e imagem — tudo
+              organizado.
+            </p>
+          </div>
         </div>
+        <div class="recurso">
+          <div class="recurso-icone">📊</div>
+          <div>
+            <h4>Importação em massa</h4>
+            <p>
+              Suba uma planilha Excel ou CSV e cadastre centenas de produtos de
+              uma vez.
+            </p>
+          </div>
+        </div>
+        <div class="recurso">
+          <div class="recurso-icone">🎨</div>
+          <div>
+            <h4>Personalização total</h4>
+            <p>
+              Logo, cores, banners e tema (claro ou escuro) do jeito que você
+              quiser.
+            </p>
+          </div>
+        </div>
+        <div class="recurso">
+          <div class="recurso-icone">🚀</div>
+          <div>
+            <h4>Hospedagem com 1 clique</h4>
+            <p>
+              Publique no Netlify ou GitHub Pages direto do celular, sem
+              configuração.
+            </p>
+          </div>
+        </div>
+        <div class="recurso">
+          <div class="recurso-icone">💬</div>
+          <div>
+            <h4>Integração com WhatsApp</h4>
+            <p>
+              Carrinho de compras envia o pedido direto pro seu WhatsApp
+              automaticamente.
+            </p>
+          </div>
+        </div>
+        <div class="recurso">
+          <div class="recurso-icone">📱</div>
+          <div>
+            <h4>100% mobile</h4>
+            <p>
+              Funciona no celular Android. Cadastre produtos de onde estiver.
+            </p>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- ===== FAQ ===== -->
     <section class="reveal">
-        <h2 class="section-titulo">Perguntas <span>frequentes</span></h2>
-        <p class="section-subtitulo">Dúvidas comuns de quem tá começando com o SimplyON.</p>
+      <h2 class="section-titulo">Perguntas <span>frequentes</span></h2>
+      <p class="section-subtitulo">
+        Dúvidas comuns de quem tá começando com o SimplyON.
+      </p>
 
-        <div class="faq">
-            <details>
-                <summary>É grátis? Preciso pagar algo?</summary>
-                <p>O SimplyON é totalmente gratuito. Você só precisa ter conta em algum serviço de hospedagem (Netlify ou GitHub Pages), que também são gratuitos.</p>
-            </details>
-            <details>
-                <summary>Preciso saber programar?</summary>
-                <p>Não. Se você sabe usar WhatsApp, você consegue usar o SimplyON. Tudo é feito por botões e formulários simples.</p>
-            </details>
-            <details>
-                <summary>Meus dados ficam salvos mesmo se eu fechar o app?</summary>
-                <p>Sim. Todos os produtos, configurações e imagens ficam salvos no seu celular. Mesmo que o app seja fechado ou o celular reiniciado, seus dados continuam lá.</p>
-            </details>
-            <details>
-                <summary>Funciona em iPhone (iOS)?</summary>
-                <p>No momento o SimplyON é exclusivo para Android. Versão iOS pode chegar futuramente.</p>
-            </details>
-            <details>
-                <summary>Como funciona a hospedagem?</summary>
-                <p>Você configura seu token do Netlify ou GitHub uma vez. Depois, com 1 clique, o app envia seu catálogo pra web e te dá um link público pra compartilhar.</p>
-            </details>
-            <details>
-                <summary>Posso usar meu próprio domínio?</summary>
-                <p>Sim! Se você hospedar via Netlify ou GitHub Pages, pode apontar um domínio próprio depois. O app te dá o link padrão, mas nada impede você de configurar um domínio personalizado.</p>
-            </details>
-        </div>
+      <div class="faq">
+        <details>
+          <summary>É grátis? Preciso pagar algo?</summary>
+          <p>
+            O SimplyON é totalmente gratuito. Você só precisa ter conta em algum
+            serviço de hospedagem (Netlify ou GitHub Pages), que também são
+            gratuitos.
+          </p>
+        </details>
+        <details>
+          <summary>Preciso saber programar?</summary>
+          <p>
+            Não. Se você sabe usar WhatsApp, você consegue usar o SimplyON. Tudo
+            é feito por botões e formulários simples.
+          </p>
+        </details>
+        <details>
+          <summary>Meus dados ficam salvos mesmo se eu fechar o app?</summary>
+          <p>
+            Sim. Todos os produtos, configurações e imagens ficam salvos no seu
+            celular. Mesmo que o app seja fechado ou o celular reiniciado, seus
+            dados continuam lá.
+          </p>
+        </details>
+        <details>
+          <summary>Funciona em iPhone (iOS)?</summary>
+          <p>
+            No momento o SimplyON é exclusivo para Android. Versão iOS pode
+            chegar futuramente.
+          </p>
+        </details>
+        <details>
+          <summary>Como funciona a hospedagem?</summary>
+          <p>
+            Você configura seu token do Netlify ou GitHub uma vez. Depois, com 1
+            clique, o app envia seu catálogo pra web e te dá um link público pra
+            compartilhar.
+          </p>
+        </details>
+        <details>
+          <summary>Posso usar meu próprio domínio?</summary>
+          <p>
+            Sim! Se você hospedar via Netlify ou GitHub Pages, pode apontar um
+            domínio próprio depois. O app te dá o link padrão, mas nada impede
+            você de configurar um domínio personalizado.
+          </p>
+        </details>
+      </div>
     </section>
 
     <!-- ===== CTA FINAL COM ANÚNCIO 2 ===== -->
     <section id="download" class="reveal cta-section">
-        <div class="ad-container">
-            <div class="ad-wrapper">
-                <script>
-                  atOptions = {
-                    'key' : '4a36de81eb4d0734e3725b0c103092a0',
-                    'format' : 'iframe',
-                    'height' : 250,
-                    'width' : 300,
-                    'params' : {}
-                  };
-                </script>
-                <script src="https://www.highrevenueformat.com/4a36de81eb4d0734e3725b0c103092a0/invoke.js"></script>
-                <div class="ad-label">publicidade</div>
-            </div>
+      <div class="ad-container">
+        <div class="ad-wrapper">
+          <script>
+            atOptions = {
+              key: "4a36de81eb4d0734e3725b0c103092a0",
+              format: "iframe",
+              height: 250,
+              width: 300,
+              params: {},
+            };
+          </script>
+          <script src="https://www.highrevenueformat.com/4a36de81eb4d0734e3725b0c103092a0/invoke.js"></script>
+          <div class="ad-label">publicidade</div>
         </div>
+      </div>
 
-        <div class="cta">
-            <h2>Pronto pra <span style="color:#38bdf8;">vender online</span>?</h2>
-            <p>Baixe o SimplyON agora e tenha seu catálogo no ar em minutos.</p>
-            <div class="botoes">
-                <a href="https://github.com/cloneey9090-netizen/Simply-On/releases/latest/download/app-release.apk" class="btn">📥 Baixar APK grátis</a>
-                <a href="https://github.com/cloneey9090-netizen/Simply-On" target="_blank" class="btn btn-secundario">💻 Ver no GitHub</a>
-            </div>
+      <div class="cta">
+        <h2>Pronto pra <span style="color: #38bdf8">vender online</span>?</h2>
+        <p>Baixe o SimplyON agora e tenha seu catálogo no ar em minutos.</p>
+        <div class="botoes">
+          <a
+            href="https://github.com/cloneey9090-netizen/Simply-On/releases/latest/download/app-release.apk"
+            class="btn"
+            >📥 Baixar APK grátis</a
+          >
         </div>
+      </div>
     </section>
 
     <!-- ===== FOOTER ===== -->
     <footer>
-        <div class="footer-links">
-            <a href="#como-funciona">Como funciona</a>
-            <a href="#download">Baixar</a>
-        </div>
-        <p>&copy; 2026 SimplyON. Todos os direitos reservados.</p>
-        <p style="margin-top: 8px;">Feito com 💙 para vendedores autônomos.</p>
+      <div class="footer-links">
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#download">Baixar</a>
+      </div>
+      <p>&copy; 2026 SimplyON. Todos os direitos reservados.</p>
+      <p style="margin-top: 8px">Feito com 💙 para vendedores autônomos.</p>
     </footer>
 
     <script>
-        const observador = new IntersectionObserver((entradas) => {
-            entradas.forEach((entrada) => {
-                if (entrada.isIntersecting) {
-                    entrada.target.classList.add('visible');
-                }
-            });
-        }, { threshold: 0.1 });
+      const observador = new IntersectionObserver(
+        (entradas) => {
+          entradas.forEach((entrada) => {
+            if (entrada.isIntersecting) {
+              entrada.target.classList.add("visible");
+            }
+          });
+        },
+        { threshold: 0.1 },
+      );
 
-        document.querySelectorAll('.reveal').forEach((el) => observador.observe(el));
+      document
+        .querySelectorAll(".reveal")
+        .forEach((el) => observador.observe(el));
     </script>
-
-</body>
+  </body>
 </html>
+
 
